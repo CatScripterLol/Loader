@@ -338,4 +338,4 @@ Hub.onGodUpdate = function(names)
 	end
 	godList.Size = UDim2.new(1, -4, 0, math.max(20, #names * 16 + 8))
 	godScroll.CanvasSize = UDim2.new(0, 0, 0, godList.Size.Y.Offset)
-en
+end
