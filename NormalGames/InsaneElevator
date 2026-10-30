@@ -14,6 +14,23 @@ local function getEnv()
 	return _G
 end
 
+local uiSrc = nil
+local uiReady = false
+local uiErr = nil
+
+task.spawn(function()
+	local ok, src = pcall(function()
+		return game:HttpGet("https://raw.githubusercontent.com/CatScripterLol/Loader/main/UI/InsaneElevator")
+	end)
+	if ok and type(src) == "string" and src ~= "" then
+		uiSrc = src
+		uiReady = true
+	else
+		uiErr = src
+		uiReady = true
+	end
+end)
+
 local function showLoadingScreen()
 	local loadGui = Instance.new("ScreenGui")
 	loadGui.Name = "ElevatorLoading"
@@ -24,36 +41,94 @@ local function showLoadingScreen()
 
 	local bg = Instance.new("Frame")
 	bg.Size = UDim2.new(1, 0, 1, 0)
-	bg.BackgroundColor3 = Color3.fromRGB(8, 8, 14)
+	bg.BackgroundColor3 = Color3.fromRGB(6, 6, 12)
 	bg.BorderSizePixel = 0
 	bg.Parent = loadGui
 
 	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, -40, 0, 36)
-	title.Position = UDim2.new(0, 20, 0.38, 0)
+	title.Size = UDim2.new(1, -40, 0, 32)
+	title.Position = UDim2.new(0, 20, 0.30, 0)
 	title.BackgroundTransparency = 1
 	title.Text = "Loading your experience"
 	title.TextColor3 = Color3.fromRGB(255, 255, 255)
 	title.Font = Enum.Font.GothamBold
-	title.TextSize = 22
+	title.TextSize = 24
 	title.TextTransparency = 1
 	title.Parent = bg
 
 	local sub = Instance.new("TextLabel")
-	sub.Size = UDim2.new(1, -40, 0, 22)
-	sub.Position = UDim2.new(0, 20, 0.38, 34)
+	sub.Size = UDim2.new(1, -40, 0, 20)
+	sub.Position = UDim2.new(0, 20, 0.30, 34)
 	sub.BackgroundTransparency = 1
 	sub.Text = "Insane Elevator"
-	sub.TextColor3 = Color3.fromRGB(140, 150, 180)
+	sub.TextColor3 = Color3.fromRGB(130, 145, 180)
 	sub.Font = Enum.Font.Gotham
 	sub.TextSize = 14
 	sub.TextTransparency = 1
 	sub.Parent = bg
 
+	local pctLabel = Instance.new("TextLabel")
+	pctLabel.Size = UDim2.new(0, 80, 0, 22)
+	pctLabel.Position = UDim2.new(0.5, -40, 0.48, 0)
+	pctLabel.BackgroundTransparency = 1
+	pctLabel.Text = "0%"
+	pctLabel.TextColor3 = Color3.fromRGB(180, 200, 255)
+	pctLabel.Font = Enum.Font.GothamBold
+	pctLabel.TextSize = 18
+	pctLabel.TextTransparency = 1
+	pctLabel.Parent = bg
+
+	local center = Instance.new("Frame")
+	center.Size = UDim2.new(0, 0, 0, 0)
+	center.Position = UDim2.new(0.5, 0, 0.58, 0)
+	center.AnchorPoint = Vector2.new(0.5, 0.5)
+	center.BackgroundTransparency = 1
+	center.Parent = bg
+
+	local core = Instance.new("Frame")
+	core.Size = UDim2.new(0, 16, 0, 16)
+	core.Position = UDim2.new(0.5, 0, 0.5, 0)
+	core.AnchorPoint = Vector2.new(0.5, 0.5)
+	core.BackgroundColor3 = Color3.fromRGB(120, 180, 255)
+	core.BorderSizePixel = 0
+	core.Parent = center
+	local coreC = Instance.new("UICorner")
+	coreC.CornerRadius = UDim.new(1, 0)
+	coreC.Parent = core
+	local coreGlow = Instance.new("UIStroke")
+	coreGlow.Color = Color3.fromRGB(180, 220, 255)
+	coreGlow.Thickness = 2.5
+	coreGlow.Transparency = 0.35
+	coreGlow.Parent = core
+
+	local rings = {}
+	local ringData = {
+		{size = 64, speed = 1.15, color = Color3.fromRGB(80, 140, 255), thick = 2},
+		{size = 92, speed = -0.8, color = Color3.fromRGB(100, 160, 255), thick = 1.5},
+		{size = 120, speed = 0.55, color = Color3.fromRGB(60, 120, 220), thick = 1.2}
+	}
+	for i, d in ipairs(ringData) do
+		local ring = Instance.new("Frame")
+		ring.Size = UDim2.new(0, d.size, 0, d.size)
+		ring.Position = UDim2.new(0.5, 0, 0.5, 0)
+		ring.AnchorPoint = Vector2.new(0.5, 0.5)
+		ring.BackgroundTransparency = 1
+		ring.Parent = center
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = d.color
+		stroke.Thickness = d.thick
+		stroke.Transparency = 0.35
+		stroke.Parent = ring
+		local rc = Instance.new("UICorner")
+		rc.CornerRadius = UDim.new(1, 0)
+		rc.Parent = ring
+		rings[i] = {frame = ring, speed = d.speed, base = 0}
+	end
+
 	local barBg = Instance.new("Frame")
-	barBg.Size = UDim2.new(0, 220, 0, 6)
-	barBg.Position = UDim2.new(0.5, -110, 0.55, 0)
-	barBg.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
+	barBg.Size = UDim2.new(0, 260, 0, 6)
+	barBg.Position = UDim2.new(0.5, -130, 0.74, 0)
+	barBg.BackgroundColor3 = Color3.fromRGB(25, 28, 40)
 	barBg.BorderSizePixel = 0
 	barBg.Parent = bg
 	local barBgC = Instance.new("UICorner")
@@ -62,108 +137,126 @@ local function showLoadingScreen()
 
 	local bar = Instance.new("Frame")
 	bar.Size = UDim2.new(0, 0, 1, 0)
-	bar.BackgroundColor3 = Color3.fromRGB(100, 160, 255)
+	bar.BackgroundColor3 = Color3.fromRGB(100, 170, 255)
 	bar.BorderSizePixel = 0
 	bar.Parent = barBg
 	local barC = Instance.new("UICorner")
 	barC.CornerRadius = UDim.new(1, 0)
 	barC.Parent = bar
 
-	local ball = Instance.new("Frame")
-	ball.Size = UDim2.new(0, 22, 0, 22)
-	ball.Position = UDim2.new(0, -30, 0.72, 0)
-	ball.AnchorPoint = Vector2.new(0.5, 0.5)
-	ball.BackgroundColor3 = Color3.fromRGB(120, 180, 255)
-	ball.BorderSizePixel = 0
-	ball.ZIndex = 5
-	ball.Parent = bg
-	local ballC = Instance.new("UICorner")
-	ballC.CornerRadius = UDim.new(1, 0)
-	ballC.Parent = ball
-	local glow = Instance.new("UIStroke")
-	glow.Color = Color3.fromRGB(180, 210, 255)
-	glow.Thickness = 2
-	glow.Transparency = 0.3
-	glow.Parent = ball
+	local skipBtn = Instance.new("TextButton")
+	skipBtn.Size = UDim2.new(0, 90, 0, 28)
+	skipBtn.Position = UDim2.new(0.5, -45, 0.82, 0)
+	skipBtn.BackgroundColor3 = Color3.fromRGB(40, 45, 65)
+	skipBtn.Text = "Skip"
+	skipBtn.TextColor3 = Color3.fromRGB(160, 170, 190)
+	skipBtn.Font = Enum.Font.GothamBold
+	skipBtn.TextSize = 13
+	skipBtn.AutoButtonColor = false
+	skipBtn.Visible = false
+	skipBtn.Parent = bg
+	local skipC = Instance.new("UICorner")
+	skipC.CornerRadius = UDim.new(0, 6)
+	skipC.Parent = skipBtn
+
+	local particles = {}
+	for i = 1, 10 do
+		local p = Instance.new("Frame")
+		p.Size = UDim2.new(0, 3, 0, 3)
+		p.AnchorPoint = Vector2.new(0.5, 0.5)
+		p.BackgroundColor3 = Color3.fromRGB(100 + math.random(0, 80), 150 + math.random(0, 60), 255)
+		p.BackgroundTransparency = 0.3
+		p.BorderSizePixel = 0
+		p.Parent = bg
+		local pc = Instance.new("UICorner")
+		pc.CornerRadius = UDim.new(1, 0)
+		pc.Parent = p
+		particles[i] = {
+			frame = p,
+			angle = math.random() * math.pi * 2,
+			radius = 35 + math.random() * 80,
+			speed = 0.35 + math.random() * 0.7,
+			yOff = (math.random() - 0.5) * 60
+		}
+	end
 
 	TweenService:Create(title, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
 	TweenService:Create(sub, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
-	TweenService:Create(bar, TweenInfo.new(2.2, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
-		Size = UDim2.new(1, 0, 1, 0)
-	}):Play()
+	TweenService:Create(pctLabel, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
 
+	local duration = 2 + math.random() * 2
 	local t0 = tick()
-	local throwDur = 0.85
-	local throws = 0
-	local maxThrows = 2
-	local lastThrow = -1
+	local skipRequested = false
+	local finished = false
 
-	local function startThrow()
-		throws = throws + 1
-		lastThrow = tick()
-		ball.Position = UDim2.new(0, -30, 0.72, 0)
-		ball.BackgroundTransparency = 0
-		glow.Transparency = 0.3
-		ball.Rotation = 0
-	end
-
-	startThrow()
+	skipBtn.MouseButton1Click:Connect(function()
+		if not skipBtn.Visible then return end
+		skipRequested = true
+	end)
 
 	local conn
 	conn = RunService.RenderStepped:Connect(function()
+		if finished then return end
 		local now = tick()
 		local elapsed = now - t0
-		local pulse = 0.5 + 0.5 * math.sin(elapsed * 4)
-		bar.BackgroundColor3 = Color3.fromRGB(80 + 40 * pulse, 140 + 30 * pulse, 255)
+		local progress = math.clamp(elapsed / duration, 0, 1)
+		if skipRequested and progress >= 0.4 then
+			progress = 1
+		end
+		local pct = math.floor(progress * 100)
+		pctLabel.Text = pct .. "%"
+		bar.Size = UDim2.new(progress, 0, 1, 0)
 
-		local te = now - lastThrow
-		if te >= 0 and te <= throwDur then
-			local u = te / throwDur
-			local x = -0.05 + u * 1.15
-			local y = 0.72 - 0.28 * math.sin(u * math.pi) + 0.02 * math.sin(u * math.pi * 4)
-			ball.Position = UDim2.new(x, 0, y, 0)
-			ball.Rotation = u * 720
-			if u > 0.85 then
-				local f = (u - 0.85) / 0.15
-				ball.BackgroundTransparency = f
-				glow.Transparency = 0.3 + 0.7 * f
-			end
-			if math.random() < 0.35 then
-				local trail = Instance.new("Frame")
-				trail.Size = UDim2.new(0, 10, 0, 10)
-				trail.AnchorPoint = Vector2.new(0.5, 0.5)
-				trail.Position = ball.Position
-				trail.BackgroundColor3 = Color3.fromRGB(100 + math.random(0, 80), 150 + math.random(0, 50), 255)
-				trail.BackgroundTransparency = 0.2
-				trail.BorderSizePixel = 0
-				trail.ZIndex = 4
-				trail.Parent = bg
-				local tc = Instance.new("UICorner")
-				tc.CornerRadius = UDim.new(1, 0)
-				tc.Parent = trail
-				TweenService:Create(trail, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					Size = UDim2.new(0, 2, 0, 2),
-					BackgroundTransparency = 1
-				}):Play()
-				task.delay(0.4, function()
-					if trail and trail.Parent then trail:Destroy() end
-				end)
-			end
-		elseif te > throwDur and throws < maxThrows then
-			startThrow()
+		local pulse = 0.55 + 0.45 * math.sin(elapsed * 3.6)
+		bar.BackgroundColor3 = Color3.fromRGB(70 + 50 * pulse, 140 + 40 * pulse, 255)
+		coreGlow.Transparency = 0.25 + 0.3 * (1 - pulse)
+		core.Size = UDim2.new(0, 14 + 5 * pulse, 0, 14 + 5 * pulse)
+
+		for _, r in ipairs(rings) do
+			r.base = r.base + r.speed * 1.7
+			r.frame.Rotation = r.base
+		end
+
+		for _, p in ipairs(particles) do
+			p.angle = p.angle + p.speed * 0.022
+			local x = 0.5 + math.cos(p.angle) * (p.radius / 900)
+			local y = 0.58 + math.sin(p.angle) * (p.radius / 900) + p.yOff / 900
+			p.frame.Position = UDim2.new(x, 0, y, 0)
+			p.frame.BackgroundTransparency = 0.25 + 0.4 * math.abs(math.sin(p.angle * 2))
+		end
+
+		if progress >= 0.4 and not skipBtn.Visible then
+			skipBtn.Visible = true
+			skipBtn.TextColor3 = Color3.fromRGB(220, 230, 255)
+			skipBtn.BackgroundColor3 = Color3.fromRGB(55, 70, 110)
+		end
+
+		if progress >= 1 then
+			finished = true
 		end
 	end)
 
-	task.wait(2.4)
+	while not finished do
+		task.wait()
+	end
 	if conn then conn:Disconnect() end
 
 	local fade = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 	TweenService:Create(bg, fade, {BackgroundTransparency = 1}):Play()
 	TweenService:Create(title, fade, {TextTransparency = 1}):Play()
 	TweenService:Create(sub, fade, {TextTransparency = 1}):Play()
+	TweenService:Create(pctLabel, fade, {TextTransparency = 1}):Play()
 	TweenService:Create(barBg, fade, {BackgroundTransparency = 1}):Play()
 	TweenService:Create(bar, fade, {BackgroundTransparency = 1}):Play()
-	TweenService:Create(ball, fade, {BackgroundTransparency = 1}):Play()
+	TweenService:Create(core, fade, {BackgroundTransparency = 1}):Play()
+	TweenService:Create(skipBtn, fade, {BackgroundTransparency = 1, TextTransparency = 1}):Play()
+	for _, r in ipairs(rings) do
+		local s = r.frame:FindFirstChildOfClass("UIStroke")
+		if s then TweenService:Create(s, fade, {Transparency = 1}):Play() end
+	end
+	for _, p in ipairs(particles) do
+		TweenService:Create(p.frame, fade, {BackgroundTransparency = 1}):Play()
+	end
 	task.wait(0.4)
 	loadGui:Destroy()
 end
@@ -592,20 +685,21 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
-local uiUrl = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/UI/InsaneElevator"
+local waitStart = tick()
+while not uiReady and (tick() - waitStart) < 8 do
+	task.wait(0.05)
+end
+
 local LS = loadstring or load
-local ok, src = pcall(function()
-	return game:HttpGet(uiUrl)
-end)
-if not ok or type(src) ~= "string" or src == "" then
-	warn("[ElevatorHub] Failed to download UI: ", src)
+if not uiSrc or type(uiSrc) ~= "string" or uiSrc == "" then
+	warn("[ElevatorHub] Failed to download UI: ", uiErr)
 	return
 end
 if not LS then
 	warn("[ElevatorHub] loadstring/load is nil")
 	return
 end
-local fn, err = LS(src)
+local fn, err = LS(uiSrc)
 if not fn then
 	warn("[ElevatorHub] UI loadstring error: ", err)
 	return
