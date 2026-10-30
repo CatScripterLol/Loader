@@ -1,4 +1,5 @@
-local Hub = getgenv().ElevatorHub
+local env = (typeof(getgenv) == "function" and getgenv()) or _G
+local Hub = env.ElevatorHub
 if not Hub then return end
 
 local player = Hub.player
