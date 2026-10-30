@@ -28,17 +28,9 @@ local function showLoadingScreen()
 	bg.BorderSizePixel = 0
 	bg.Parent = loadGui
 
-	local accent = Instance.new("Frame")
-	accent.Size = UDim2.new(0, 0, 0, 3)
-	accent.Position = UDim2.new(0.5, 0, 0.42, 0)
-	accent.AnchorPoint = Vector2.new(0.5, 0.5)
-	accent.BackgroundColor3 = Color3.fromRGB(100, 140, 255)
-	accent.BorderSizePixel = 0
-	accent.Parent = bg
-
 	local title = Instance.new("TextLabel")
 	title.Size = UDim2.new(1, -40, 0, 36)
-	title.Position = UDim2.new(0, 20, 0.42, -50)
+	title.Position = UDim2.new(0, 20, 0.38, 0)
 	title.BackgroundTransparency = 1
 	title.Text = "Loading your experience"
 	title.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -49,7 +41,7 @@ local function showLoadingScreen()
 
 	local sub = Instance.new("TextLabel")
 	sub.Size = UDim2.new(1, -40, 0, 22)
-	sub.Position = UDim2.new(0, 20, 0.42, -16)
+	sub.Position = UDim2.new(0, 20, 0.38, 34)
 	sub.BackgroundTransparency = 1
 	sub.Text = "Insane Elevator"
 	sub.TextColor3 = Color3.fromRGB(140, 150, 180)
@@ -60,7 +52,7 @@ local function showLoadingScreen()
 
 	local barBg = Instance.new("Frame")
 	barBg.Size = UDim2.new(0, 220, 0, 6)
-	barBg.Position = UDim2.new(0.5, -110, 0.42, 24)
+	barBg.Position = UDim2.new(0.5, -110, 0.55, 0)
 	barBg.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
 	barBg.BorderSizePixel = 0
 	barBg.Parent = bg
@@ -77,49 +69,101 @@ local function showLoadingScreen()
 	barC.CornerRadius = UDim.new(1, 0)
 	barC.Parent = bar
 
-	local dots = Instance.new("TextLabel")
-	dots.Size = UDim2.new(1, 0, 0, 20)
-	dots.Position = UDim2.new(0, 0, 0.42, 40)
-	dots.BackgroundTransparency = 1
-	dots.Text = ""
-	dots.TextColor3 = Color3.fromRGB(160, 170, 200)
-	dots.Font = Enum.Font.Gotham
-	dots.TextSize = 16
-	dots.Parent = bg
+	local ball = Instance.new("Frame")
+	ball.Size = UDim2.new(0, 22, 0, 22)
+	ball.Position = UDim2.new(0, -30, 0.72, 0)
+	ball.AnchorPoint = Vector2.new(0.5, 0.5)
+	ball.BackgroundColor3 = Color3.fromRGB(120, 180, 255)
+	ball.BorderSizePixel = 0
+	ball.ZIndex = 5
+	ball.Parent = bg
+	local ballC = Instance.new("UICorner")
+	ballC.CornerRadius = UDim.new(1, 0)
+	ballC.Parent = ball
+	local glow = Instance.new("UIStroke")
+	glow.Color = Color3.fromRGB(180, 210, 255)
+	glow.Thickness = 2
+	glow.Transparency = 0.3
+	glow.Parent = ball
 
-	local ti = TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-	TweenService:Create(title, ti, {TextTransparency = 0}):Play()
-	TweenService:Create(sub, ti, {TextTransparency = 0}):Play()
-	TweenService:Create(accent, TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Size = UDim2.new(0, 160, 0, 3)
-	}):Play()
-
-	local spinConn
-	local t0 = tick()
-	spinConn = RunService.RenderStepped:Connect(function()
-		local elapsed = tick() - t0
-		local phase = math.floor(elapsed * 3) % 4
-		dots.Text = string.rep(".", phase)
-		local pulse = 0.5 + 0.5 * math.sin(elapsed * 4)
-		bar.BackgroundColor3 = Color3.fromRGB(80 + 40 * pulse, 140 + 30 * pulse, 255)
-	end)
-
-	TweenService:Create(bar, TweenInfo.new(1.8, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+	TweenService:Create(title, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
+	TweenService:Create(sub, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
+	TweenService:Create(bar, TweenInfo.new(2.2, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
 		Size = UDim2.new(1, 0, 1, 0)
 	}):Play()
 
-	task.wait(2.1)
+	local t0 = tick()
+	local throwDur = 0.85
+	local throws = 0
+	local maxThrows = 2
+	local lastThrow = -1
 
-	if spinConn then spinConn:Disconnect() end
+	local function startThrow()
+		throws = throws + 1
+		lastThrow = tick()
+		ball.Position = UDim2.new(0, -30, 0.72, 0)
+		ball.BackgroundTransparency = 0
+		glow.Transparency = 0.3
+		ball.Rotation = 0
+	end
+
+	startThrow()
+
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local now = tick()
+		local elapsed = now - t0
+		local pulse = 0.5 + 0.5 * math.sin(elapsed * 4)
+		bar.BackgroundColor3 = Color3.fromRGB(80 + 40 * pulse, 140 + 30 * pulse, 255)
+
+		local te = now - lastThrow
+		if te >= 0 and te <= throwDur then
+			local u = te / throwDur
+			local x = -0.05 + u * 1.15
+			local y = 0.72 - 0.28 * math.sin(u * math.pi) + 0.02 * math.sin(u * math.pi * 4)
+			ball.Position = UDim2.new(x, 0, y, 0)
+			ball.Rotation = u * 720
+			if u > 0.85 then
+				local f = (u - 0.85) / 0.15
+				ball.BackgroundTransparency = f
+				glow.Transparency = 0.3 + 0.7 * f
+			end
+			if math.random() < 0.35 then
+				local trail = Instance.new("Frame")
+				trail.Size = UDim2.new(0, 10, 0, 10)
+				trail.AnchorPoint = Vector2.new(0.5, 0.5)
+				trail.Position = ball.Position
+				trail.BackgroundColor3 = Color3.fromRGB(100 + math.random(0, 80), 150 + math.random(0, 50), 255)
+				trail.BackgroundTransparency = 0.2
+				trail.BorderSizePixel = 0
+				trail.ZIndex = 4
+				trail.Parent = bg
+				local tc = Instance.new("UICorner")
+				tc.CornerRadius = UDim.new(1, 0)
+				tc.Parent = trail
+				TweenService:Create(trail, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					Size = UDim2.new(0, 2, 0, 2),
+					BackgroundTransparency = 1
+				}):Play()
+				task.delay(0.4, function()
+					if trail and trail.Parent then trail:Destroy() end
+				end)
+			end
+		elseif te > throwDur and throws < maxThrows then
+			startThrow()
+		end
+	end)
+
+	task.wait(2.4)
+	if conn then conn:Disconnect() end
 
 	local fade = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 	TweenService:Create(bg, fade, {BackgroundTransparency = 1}):Play()
 	TweenService:Create(title, fade, {TextTransparency = 1}):Play()
 	TweenService:Create(sub, fade, {TextTransparency = 1}):Play()
-	TweenService:Create(dots, fade, {TextTransparency = 1}):Play()
 	TweenService:Create(barBg, fade, {BackgroundTransparency = 1}):Play()
 	TweenService:Create(bar, fade, {BackgroundTransparency = 1}):Play()
-	TweenService:Create(accent, fade, {BackgroundTransparency = 1}):Play()
+	TweenService:Create(ball, fade, {BackgroundTransparency = 1}):Play()
 	task.wait(0.4)
 	loadGui:Destroy()
 end
