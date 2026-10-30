@@ -83,7 +83,7 @@ pcall(function()
 	local Event = ReplicatedStorage:FindFirstChild("createTextNotification")
 	if Event and typeof(firesignal) == "function" then
 		firesignal(Event.OnClientEvent,
-			"<font color=\"#ffffff\">Script : </font><font color=\"#ff9e9e\"><b>made by cat_scripter</b></font>\n<font color=\"#ffb347\"><b>don\u2019t forget to subscribe</b></font>",
+			"<font color=\"#ffffff\">Script : </font><font color=\"#ff9e9e\"><b>made by cat_scripter</b></font>\n<font color=\"#ffb347\"><b>dont forget to subscribe</b></font>",
 			6
 		)
 	end
