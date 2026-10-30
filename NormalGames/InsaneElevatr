@@ -1,1 +1,448 @@
+local ALLOWED_PLACE = 4104106043
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+local pg = player:WaitForChild("PlayerGui")
 
+local function confirmContinue()
+	if game.PlaceId == ALLOWED_PLACE then
+		return true
+	end
+	local done = false
+	local result = false
+	local conf = Instance.new("ScreenGui")
+	conf.Name = "PlaceConfirm"
+	conf.ResetOnSpawn = false
+	conf.Parent = pg
+	local box = Instance.new("Frame")
+	box.Size = UDim2.new(0, 320, 0, 150)
+	box.Position = UDim2.new(0.5, -160, 0.5, -75)
+	box.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+	box.BorderSizePixel = 0
+	box.Parent = conf
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 10)
+	c.Parent = box
+	local msg = Instance.new("TextLabel")
+	msg.Size = UDim2.new(1, -20, 0, 70)
+	msg.Position = UDim2.new(0, 10, 0, 12)
+	msg.BackgroundTransparency = 1
+	msg.Text = "This is not Insane Elevator\n(PlaceId: " .. tostring(game.PlaceId) .. ")\nContinue executing anyway?"
+	msg.TextColor3 = Color3.fromRGB(255, 255, 255)
+	msg.Font = Enum.Font.Gotham
+	msg.TextSize = 14
+	msg.TextWrapped = true
+	msg.Parent = box
+	local yes = Instance.new("TextButton")
+	yes.Size = UDim2.new(0, 120, 0, 32)
+	yes.Position = UDim2.new(0, 20, 1, -48)
+	yes.BackgroundColor3 = Color3.fromRGB(50, 180, 80)
+	yes.Text = "Continue"
+	yes.TextColor3 = Color3.fromRGB(255, 255, 255)
+	yes.Font = Enum.Font.GothamBold
+	yes.TextSize = 13
+	yes.Parent = box
+	local yc = Instance.new("UICorner")
+	yc.CornerRadius = UDim.new(0, 6)
+	yc.Parent = yes
+	local no = Instance.new("TextButton")
+	no.Size = UDim2.new(0, 120, 0, 32)
+	no.Position = UDim2.new(1, -140, 1, -48)
+	no.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+	no.Text = "Cancel"
+	no.TextColor3 = Color3.fromRGB(255, 255, 255)
+	no.Font = Enum.Font.GothamBold
+	no.TextSize = 13
+	no.Parent = box
+	local nc = Instance.new("UICorner")
+	nc.CornerRadius = UDim.new(0, 6)
+	nc.Parent = no
+	yes.MouseButton1Click:Connect(function()
+		result = true
+		done = true
+		conf:Destroy()
+	end)
+	no.MouseButton1Click:Connect(function()
+		result = false
+		done = true
+		conf:Destroy()
+	end)
+	while not done do
+		task.wait()
+	end
+	return result
+end
+
+if not confirmContinue() then
+	return
+end
+
+pcall(function()
+	local Event = ReplicatedStorage:FindFirstChild("createTextNotification")
+	if Event and typeof(firesignal) == "function" then
+		firesignal(Event.OnClientEvent,
+			"<font color=\"#ffffff\">Script : </font><font color=\"#ff9e9e\"><b>made by cat_scripter</b></font>\n<font color=\"#ffb347\"><b>don\u2019t forget to subscribe</b></font>",
+			6
+		)
+	end
+end)
+
+local Hub = getgenv().ElevatorHub or {}
+getgenv().ElevatorHub = Hub
+
+Hub.player = player
+Hub.pg = pg
+Hub.killerESP = false
+Hub.elevESP = false
+Hub.mapESP = false
+Hub.cleanVision = false
+Hub.antiRadio = false
+Hub.godCheckerOn = false
+Hub.predVisible = true
+Hub.killerHighlights = {}
+Hub.elevHighlights = {}
+Hub.mapHighlights = {}
+Hub.mutedSounds = {}
+Hub.hiddenRadios = {}
+Hub.disabledEffects = {}
+Hub.savedSky = nil
+Hub.lastFloorName = "None"
+Hub.saved = {
+	FogEnd = Lighting.FogEnd,
+	FogStart = Lighting.FogStart,
+	Brightness = Lighting.Brightness,
+	Ambient = Lighting.Ambient,
+	OutdoorAmbient = Lighting.OutdoorAmbient,
+	ClockTime = Lighting.ClockTime,
+	GlobalShadows = Lighting.GlobalShadows
+}
+
+function Hub.teleport(pos)
+	local char = player.Character
+	if char and char:FindFirstChild("HumanoidRootPart") then
+		char.HumanoidRootPart.CFrame = CFrame.new(pos)
+	end
+end
+
+function Hub.clearHighlights(tbl)
+	for _, h in pairs(tbl) do
+		if h and h.Parent then h:Destroy() end
+	end
+	table.clear(tbl)
+end
+
+function Hub.applyHighlight(obj, color, tbl)
+	if not obj or obj:FindFirstChild("ESPHighlight") then return end
+	local h = Instance.new("Highlight")
+	h.Name = "ESPHighlight"
+	h.Adornee = obj
+	h.FillColor = color
+	h.OutlineColor = color
+	h.FillTransparency = 0.55
+	h.OutlineTransparency = 0
+	h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	h.Parent = obj
+	table.insert(tbl, h)
+end
+
+function Hub.isKiller(model)
+	if not model:FindFirstChildOfClass("Humanoid") then return false end
+	if Players:GetPlayerFromCharacter(model) then return false end
+	return true
+end
+
+function Hub.applyDefaultSky()
+	for _, v in pairs(Lighting:GetChildren()) do
+		if v:IsA("Sky") then v:Destroy() end
+	end
+	local sky = Instance.new("Sky")
+	sky.Name = "DefaultSky"
+	sky.SkyboxBk = "rbxasset://textures/sky/sky512_bk.tex"
+	sky.SkyboxDn = "rbxasset://textures/sky/sky512_dn.tex"
+	sky.SkyboxFt = "rbxasset://textures/sky/sky512_ft.tex"
+	sky.SkyboxLf = "rbxasset://textures/sky/sky512_lf.tex"
+	sky.SkyboxRt = "rbxasset://textures/sky/sky512_rt.tex"
+	sky.SkyboxUp = "rbxasset://textures/sky/sky512_up.tex"
+	sky.Parent = Lighting
+end
+
+function Hub.setCleanVision(on)
+	Hub.cleanVision = on
+	if on then
+		Hub.saved.FogEnd = Lighting.FogEnd
+		Hub.saved.FogStart = Lighting.FogStart
+		Hub.saved.Brightness = Lighting.Brightness
+		Hub.saved.Ambient = Lighting.Ambient
+		Hub.saved.OutdoorAmbient = Lighting.OutdoorAmbient
+		Hub.saved.ClockTime = Lighting.ClockTime
+		Hub.saved.GlobalShadows = Lighting.GlobalShadows
+		for _, v in pairs(Lighting:GetChildren()) do
+			if v:IsA("Sky") then Hub.savedSky = v:Clone() end
+		end
+		Lighting.FogEnd = math.huge
+		Lighting.FogStart = 0
+		Lighting.Brightness = 2
+		Lighting.Ambient = Color3.fromRGB(180, 180, 180)
+		Lighting.OutdoorAmbient = Color3.fromRGB(180, 180, 180)
+		Lighting.ClockTime = 14
+		Lighting.GlobalShadows = false
+		Hub.applyDefaultSky()
+		table.clear(Hub.disabledEffects)
+		for _, v in pairs(Lighting:GetChildren()) do
+			if v:IsA("Atmosphere") or v:IsA("BloomEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("BlurEffect") or v:IsA("DepthOfFieldEffect") or v:IsA("SunRaysEffect") then
+				if v.Enabled then
+					v.Enabled = false
+					table.insert(Hub.disabledEffects, v)
+				end
+			end
+		end
+	else
+		Lighting.FogEnd = Hub.saved.FogEnd
+		Lighting.FogStart = Hub.saved.FogStart
+		Lighting.Brightness = Hub.saved.Brightness
+		Lighting.Ambient = Hub.saved.Ambient
+		Lighting.OutdoorAmbient = Hub.saved.OutdoorAmbient
+		Lighting.ClockTime = Hub.saved.ClockTime
+		Lighting.GlobalShadows = Hub.saved.GlobalShadows
+		local def = Lighting:FindFirstChild("DefaultSky")
+		if def then def:Destroy() end
+		if Hub.savedSky then
+			Hub.savedSky.Parent = Lighting
+			Hub.savedSky = nil
+		end
+		for _, v in pairs(Hub.disabledEffects) do
+			if v and v.Parent then v.Enabled = true end
+		end
+		table.clear(Hub.disabledEffects)
+	end
+end
+
+function Hub.handleAntiRadio()
+	if not Hub.radioHolder or not Hub.radioHolder.Parent then
+		Hub.radioHolder = Instance.new("Folder")
+		Hub.radioHolder.Name = "AntiRadioHolder"
+		Hub.radioHolder.Parent = pg
+	end
+	for _, plr in pairs(Players:GetPlayers()) do
+		local containers = {plr:FindFirstChild("Backpack"), plr.Character}
+		for _, container in pairs(containers) do
+			if container then
+				for _, item in pairs(container:GetChildren()) do
+					local n = string.lower(item.Name)
+					if n == "radio" or string.find(n, "radio") then
+						for _, d in pairs(item:GetDescendants()) do
+							if d:IsA("Sound") then
+								if Hub.mutedSounds[d] == nil then
+									Hub.mutedSounds[d] = {Volume = d.Volume, Playing = d.Playing}
+								end
+								d.Volume = 0
+								d:Stop()
+							end
+						end
+						if not Hub.hiddenRadios[item] then
+							Hub.hiddenRadios[item] = container
+							item.Parent = Hub.radioHolder
+						end
+					end
+				end
+			end
+		end
+	end
+	for _, d in pairs(workspace:GetDescendants()) do
+		if d:IsA("Sound") then
+			local n = string.lower(d.Name)
+			local p = d.Parent and string.lower(d.Parent.Name) or ""
+			if string.find(n, "radio") or string.find(p, "radio") then
+				if Hub.mutedSounds[d] == nil then
+					Hub.mutedSounds[d] = {Volume = d.Volume, Playing = d.Playing}
+				end
+				d.Volume = 0
+				d:Stop()
+			end
+		end
+	end
+end
+
+function Hub.setAntiRadio(on)
+	Hub.antiRadio = on
+	if not on then
+		for snd, data in pairs(Hub.mutedSounds) do
+			if snd and snd.Parent then
+				snd.Volume = data.Volume
+				snd.Playing = data.Playing
+			end
+		end
+		table.clear(Hub.mutedSounds)
+		for tool, parent in pairs(Hub.hiddenRadios) do
+			if tool and parent and parent.Parent then
+				tool.Parent = parent
+			end
+		end
+		table.clear(Hub.hiddenRadios)
+	end
+end
+
+function Hub.hasGodMode(plr)
+	local ok, result = pcall(function()
+		local bp = plr:FindFirstChild("Backpack")
+		if bp and bp:FindFirstChild("God Mode") then return true end
+		local char = plr.Character
+		if char and char:FindFirstChild("God Mode") then return true end
+		return false
+	end)
+	return ok and result
+end
+
+function Hub.getGodUsers()
+	local names = {}
+	for _, plr in pairs(Players:GetPlayers()) do
+		if Hub.hasGodMode(plr) then
+			table.insert(names, plr.Name)
+		end
+	end
+	return names
+end
+
+function Hub.scanFloor()
+	local result = nil
+	for _, v in pairs(workspace:GetChildren()) do
+		if v:IsA("Model") or v:IsA("Folder") then
+			local n = v.Name
+			local ln = string.lower(n)
+			if ln ~= "elevator" and ln ~= "baseplate" and ln ~= "camera" and ln ~= "terrain"
+				and not Players:FindFirstChild(n)
+				and not string.find(ln, "spawn") and not string.find(ln, "lobby")
+				and not string.find(ln, "shop") and not string.find(ln, "vip") and #n > 2 then
+				if v:FindFirstChildOfClass("Humanoid") or v:FindFirstChild("Map") or v:FindFirstChild("Floor")
+					or string.find(ln, "floor") or string.find(ln, "map") or string.find(ln, "stage")
+					or string.find(ln, "killer") or string.find(ln, "alien") or string.find(ln, "granny")
+					or string.find(ln, "jeff") or string.find(ln, "scp") or string.find(ln, "siren")
+					or string.find(ln, "slender") or string.find(ln, "piggy") or string.find(ln, "cartoon")
+					or string.find(ln, "freddy") or string.find(ln, "penny") or string.find(ln, "rake")
+					or string.find(ln, "baldi") or string.find(ln, "imposter") or string.find(ln, "among")
+					or string.find(ln, "white") or string.find(ln, "troll") or string.find(ln, "sonic")
+					or string.find(ln, "trex") or string.find(ln, "terminator") or string.find(ln, "john") then
+					result = n
+				end
+			end
+		end
+	end
+	if not result then
+		local cf = workspace:FindFirstChild("CurrentFloor")
+		if cf then result = cf.Name end
+	end
+	if not result then
+		for _, v in pairs(pg:GetDescendants()) do
+			if (v:IsA("TextLabel") or v:IsA("TextButton")) and v.Text then
+				local t = v.Text
+				local match = string.match(t, "[Ff]loor%s*[#:]?%s*(%d+)")
+				if match then
+					result = "Floor " .. match
+				elseif string.find(string.lower(t), "floor") and #t < 30 and #t > 3 then
+					result = t
+				end
+			end
+		end
+	end
+	if result and result ~= Hub.lastFloorName then
+		Hub.lastFloorName = result
+	end
+	return Hub.lastFloorName
+end
+
+workspace.ChildAdded:Connect(function(child)
+	task.wait(0.3)
+	local n = string.lower(child.Name)
+	if child:IsA("Model") or child:IsA("Folder") then
+		if not string.find(n, "elevator") and not string.find(n, "spawn") and not Players:FindFirstChild(child.Name) then
+			Hub.lastFloorName = child.Name
+			if Hub.onFloorUpdate then Hub.onFloorUpdate(child.Name) end
+		end
+	end
+end)
+
+local lastUpdate = 0
+RunService.Heartbeat:Connect(function()
+	local now = tick()
+	if now - lastUpdate < 0.5 then return end
+	lastUpdate = now
+
+	if Hub.cleanVision then
+		Lighting.FogEnd = math.huge
+		Lighting.FogStart = 0
+		if not Lighting:FindFirstChild("DefaultSky") then Hub.applyDefaultSky() end
+		for _, v in pairs(Lighting:GetChildren()) do
+			if v:IsA("Sky") and v.Name ~= "DefaultSky" then v:Destroy() end
+		end
+	end
+
+	if Hub.antiRadio then
+		Hub.handleAntiRadio()
+	end
+
+	local floor = Hub.scanFloor()
+	if Hub.onFloorUpdate then Hub.onFloorUpdate(floor) end
+	if Hub.godCheckerOn and Hub.onGodUpdate then
+		Hub.onGodUpdate(Hub.getGodUsers())
+	end
+
+	if Hub.killerESP then
+		Hub.clearHighlights(Hub.killerHighlights)
+		for _, v in pairs(workspace:GetDescendants()) do
+			if v:IsA("Model") and Hub.isKiller(v) then
+				Hub.applyHighlight(v, Color3.fromRGB(255, 40, 40), Hub.killerHighlights)
+			end
+		end
+	end
+
+	if Hub.elevESP then
+		Hub.clearHighlights(Hub.elevHighlights)
+		for _, v in pairs(workspace:GetDescendants()) do
+			if v:IsA("Model") or v:IsA("BasePart") then
+				local name = string.lower(v.Name)
+				if string.find(name, "elevator") or name == "lift" or name == "car" then
+					Hub.applyHighlight(v, Color3.fromRGB(0, 200, 255), Hub.elevHighlights)
+				end
+			end
+		end
+	end
+
+	if Hub.mapESP then
+		Hub.clearHighlights(Hub.mapHighlights)
+		for _, v in pairs(workspace:GetChildren()) do
+			if (v:IsA("Model") or v:IsA("Folder")) and v.Name == Hub.lastFloorName then
+				Hub.applyHighlight(v, Color3.fromRGB(255, 200, 50), Hub.mapHighlights)
+			elseif v:IsA("Model") or v:IsA("Folder") then
+				local ln = string.lower(v.Name)
+				if (string.find(ln, "floor") or string.find(ln, "map") or string.find(ln, "stage"))
+					and not Players:FindFirstChild(v.Name) and ln ~= "elevator" then
+					Hub.applyHighlight(v, Color3.fromRGB(255, 200, 50), Hub.mapHighlights)
+				end
+			end
+		end
+		local cf = workspace:FindFirstChild("CurrentFloor")
+		if cf then Hub.applyHighlight(cf, Color3.fromRGB(255, 200, 50), Hub.mapHighlights) end
+	end
+end)
+
+local uiUrl = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/UI/InsaneElevator"
+local ok, src = pcall(function()
+	return game:HttpGet(uiUrl)
+end)
+if not ok or not src or src == "" then
+	warn("[ElevatorHub] Failed to download UI: ", src)
+	return
+end
+
+local fn, err = loadstring(src)
+if not fn then
+	warn("[ElevatorHub] UI loadstring error: ", err)
+	return
+end
+
+local ran, runErr = pcall(fn)
+if not ran then
+	warn("[ElevatorHub] UI runtime error: ", runErr)
+end
