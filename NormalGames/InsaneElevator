@@ -6,6 +6,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local pg = player:WaitForChild("PlayerGui")
 
+local function getEnv()
+	if typeof(getgenv) == "function" then
+		return getgenv()
+	end
+	return _G
+end
+
 local function confirmContinue()
 	if game.PlaceId == ALLOWED_PLACE then
 		return true
@@ -89,8 +96,9 @@ pcall(function()
 	end
 end)
 
-local Hub = getgenv().ElevatorHub or {}
-getgenv().ElevatorHub = Hub
+local env = getEnv()
+local Hub = env.ElevatorHub or {}
+env.ElevatorHub = Hub
 
 Hub.player = player
 Hub.pg = pg
@@ -428,20 +436,23 @@ RunService.Heartbeat:Connect(function()
 end)
 
 local uiUrl = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/UI/InsaneElevator"
+local LS = loadstring or load
 local ok, src = pcall(function()
 	return game:HttpGet(uiUrl)
 end)
-if not ok or not src or src == "" then
+if not ok or type(src) ~= "string" or src == "" then
 	warn("[ElevatorHub] Failed to download UI: ", src)
 	return
 end
-
-local fn, err = loadstring(src)
+if not LS then
+	warn("[ElevatorHub] loadstring/load is nil")
+	return
+end
+local fn, err = LS(src)
 if not fn then
 	warn("[ElevatorHub] UI loadstring error: ", err)
 	return
 end
-
 local ran, runErr = pcall(fn)
 if not ran then
 	warn("[ElevatorHub] UI runtime error: ", runErr)
