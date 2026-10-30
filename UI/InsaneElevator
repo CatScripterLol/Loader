@@ -225,11 +225,11 @@ predBtn.MouseButton1Click:Connect(function()
 	predBtn.BackgroundColor3 = Hub.predVisible and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
 end)
 
-local godBtn = makeBtn(toolsPage, "God Mode UI: OFF", 0.38, Color3.fromRGB(180, 50, 50))
+local godBtn = makeBtn(toolsPage, "God Mode Detector: OFF", 0.38, Color3.fromRGB(180, 50, 50))
 godBtn.MouseButton1Click:Connect(function()
 	Hub.godCheckerOn = not Hub.godCheckerOn
 	godGui.Enabled = Hub.godCheckerOn
-	godBtn.Text = Hub.godCheckerOn and "God Mode UI: ON" or "God Mode UI: OFF"
+	godBtn.Text = Hub.godCheckerOn and "God Mode Detector: ON" or "God Mode Detector: OFF"
 	godBtn.BackgroundColor3 = Hub.godCheckerOn and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
 end)
 
@@ -293,7 +293,7 @@ godCorner.Parent = godFrame
 local godTitle = Instance.new("TextLabel")
 godTitle.Size = UDim2.new(1, 0, 0, 24)
 godTitle.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-godTitle.Text = "God Mode Users"
+godTitle.Text = "God Mode Detector"
 godTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 godTitle.Font = Enum.Font.GothamBold
 godTitle.TextSize = 12
