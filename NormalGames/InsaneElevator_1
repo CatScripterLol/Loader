@@ -1,0 +1,34 @@
+local ALLOWED_PLACE = 4104106043
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local player = Players.LocalPlayer
+local pg = player:WaitForChild("PlayerGui")
+
+local function getEnv()
+	if typeof(getgenv) == "function" then
+		return getgenv()
+	end
+	return _G
+end
+
+local uiSrc = nil
+local uiReady = false
+local uiErr = nil
+
+task.spawn(function()
+	local ok, src = pcall(function()
+		return game:HttpGet("https://raw.githubusercontent.com/CatScripterLol/Loader/main/UI/InsaneElevator")
+	end)
+	if ok and type(src) == "string" and src ~= "" then
+		uiSrc = src
+		uiReady = true
+	else
+		uiErr = src
+		uiReady = true
+	end
+end)
+
+-- PART 1 truncated for size; full body continues in _2 _3 _4
