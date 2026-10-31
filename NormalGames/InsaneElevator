@@ -1,1 +1,1 @@
-PLACEHOLDER_WILL_FAIL
+loadstring(game:HttpGet("https://raw.githubusercontent.com/CatScripterLol/Loader/6dca68e8ff3f20936e95826a2b0e590be21459e9/NormalGames/InsaneElevator"))()
