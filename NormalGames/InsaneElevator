@@ -1,30 +1,7 @@
--- LOCAL_VERSION must match NormalGames/VERSION after you update (soft-stop only, no game kick)
+-- LOCAL_VERSION must match NormalGames/VERSION after you update
+-- On mismatch: Kick (leave game). No KILL switch.
 local LOCAL_VERSION = "1.0.0"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/VERSION"
-
-local function softStopHub(reason)
-	pcall(function()
-		local env = (typeof(getgenv) == "function" and getgenv()) or _G
-		local Hub = env.ElevatorHub
-		if Hub then
-			Hub.autoFarm = false
-			Hub.playerESP = false
-			Hub.killerESP = false
-			Hub.elevESP = false
-			Hub.mapESP = false
-			Hub.antiAfk = false
-		end
-	end)
-	pcall(function()
-		local pg = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
-		if not pg then return end
-		for _, name in ipairs({"ElevatorTP", "ElevatorWho", "ElevatorLoading", "FloorPredictor", "GodModeChecker"}) do
-			local g = pg:FindFirstChild(name)
-			if g then g:Destroy() end
-		end
-	end)
-	warn("[ElevatorHub] ", reason or "Script updated — re-execute the loadstring. You were NOT kicked from the game.")
-end
 
 task.spawn(function()
 	while true do
@@ -35,7 +12,11 @@ task.spawn(function()
 		if ok and type(remote) == "string" then
 			remote = (remote:gsub("%s+", ""))
 			if remote ~= "" and remote ~= LOCAL_VERSION then
-				softStopHub("Hub updated (v" .. tostring(remote) .. "). Re-execute loadstring. Streak safe — not kicked.")
+				pcall(function()
+					game:GetService("Players").LocalPlayer:Kick(
+						"ElevatorHub updated (v" .. tostring(remote) .. "). Re-execute the loadstring."
+					)
+				end)
 				break
 			end
 		end
