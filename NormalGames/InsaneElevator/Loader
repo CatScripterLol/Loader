@@ -1,6 +1,12 @@
-local LOCAL_VERSION = "1.0.5"
+local LOCAL_VERSION = "1.1.0"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 local BASE = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/"
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local pg = player:WaitForChild("PlayerGui")
 
 local function checkVersion()
 	local ok, remote = pcall(function()
@@ -10,9 +16,7 @@ local function checkVersion()
 	remote = remote:gsub("%s+", "")
 	if remote ~= "" and remote ~= LOCAL_VERSION then
 		pcall(function()
-			game:GetService("Players").LocalPlayer:Kick(
-				"ElevatorHub updated (v" .. tostring(remote) .. "). Re-execute the loadstring."
-			)
+			player:Kick("ElevatorHub updated (v" .. tostring(remote) .. "). Re-execute the loadstring.")
 		end)
 		return true
 	end
@@ -20,13 +24,279 @@ local function checkVersion()
 end
 
 if checkVersion() then return end
-
 task.spawn(function()
 	while true do
 		task.wait(8)
 		if checkVersion() then break end
 	end
 end)
+
+local function tween(obj, ti, props)
+	local t = TweenService:Create(obj, ti, props)
+	t:Play()
+	return t
+end
+
+local function runLoading()
+	local done = false
+	local skipped = false
+	local duration = 4 + math.random() * 4
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "ElevatorBoot"
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 9999
+	gui.Parent = pg
+
+	local dim = Instance.new("Frame")
+	dim.Size = UDim2.new(1, 0, 1, 0)
+	dim.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
+	dim.BackgroundTransparency = 1
+	dim.BorderSizePixel = 0
+	dim.Parent = gui
+
+	local card = Instance.new("Frame")
+	card.Size = UDim2.new(0, 320, 0, 180)
+	card.Position = UDim2.new(0.5, 0, 0.5, 0)
+	card.AnchorPoint = Vector2.new(0.5, 0.5)
+	card.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
+	card.BorderSizePixel = 0
+	card.Parent = dim
+	local cc = Instance.new("UICorner")
+	cc.CornerRadius = UDim.new(0, 14)
+	cc.Parent = card
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(55, 55, 80)
+	stroke.Thickness = 1
+	stroke.Parent = card
+
+	local accent = Instance.new("Frame")
+	accent.Size = UDim2.new(1, 0, 0, 3)
+	accent.BackgroundColor3 = Color3.fromRGB(90, 120, 255)
+	accent.BorderSizePixel = 0
+	accent.Parent = card
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, -32, 0, 28)
+	title.Position = UDim2.new(0, 16, 0, 20)
+	title.BackgroundTransparency = 1
+	title.Text = "ElevatorHub"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 22
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Parent = card
+
+	local sub = Instance.new("TextLabel")
+	sub.Size = UDim2.new(1, -32, 0, 18)
+	sub.Position = UDim2.new(0, 16, 0, 48)
+	sub.BackgroundTransparency = 1
+	sub.Text = "Insane Elevator"
+	sub.TextColor3 = Color3.fromRGB(130, 140, 170)
+	sub.Font = Enum.Font.Gotham
+	sub.TextSize = 13
+	sub.TextXAlignment = Enum.TextXAlignment.Left
+	sub.Parent = card
+
+	local status = Instance.new("TextLabel")
+	status.Size = UDim2.new(1, -32, 0, 16)
+	status.Position = UDim2.new(0, 16, 0, 100)
+	status.BackgroundTransparency = 1
+	status.Text = "Preparing..."
+	status.TextColor3 = Color3.fromRGB(160, 165, 190)
+	status.Font = Enum.Font.Gotham
+	status.TextSize = 12
+	status.TextXAlignment = Enum.TextXAlignment.Left
+	status.Parent = card
+
+	local pct = Instance.new("TextLabel")
+	pct.Size = UDim2.new(0, 50, 0, 16)
+	pct.Position = UDim2.new(1, -66, 0, 100)
+	pct.BackgroundTransparency = 1
+	pct.Text = "0%"
+	pct.TextColor3 = Color3.fromRGB(200, 205, 230)
+	pct.Font = Enum.Font.GothamBold
+	pct.TextSize = 12
+	pct.TextXAlignment = Enum.TextXAlignment.Right
+	pct.Parent = card
+
+	local barBg = Instance.new("Frame")
+	barBg.Size = UDim2.new(1, -32, 0, 8)
+	barBg.Position = UDim2.new(0, 16, 0, 124)
+	barBg.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
+	barBg.BorderSizePixel = 0
+	barBg.Parent = card
+	local barBgC = Instance.new("UICorner")
+	barBgC.CornerRadius = UDim.new(1, 0)
+	barBgC.Parent = barBg
+
+	local bar = Instance.new("Frame")
+	bar.Size = UDim2.new(0, 0, 1, 0)
+	bar.BackgroundColor3 = Color3.fromRGB(90, 120, 255)
+	bar.BorderSizePixel = 0
+	bar.Parent = barBg
+	local barC = Instance.new("UICorner")
+	barC.CornerRadius = UDim.new(1, 0)
+	barC.Parent = bar
+
+	local skip = Instance.new("TextButton")
+	skip.Size = UDim2.new(0, 72, 0, 26)
+	skip.Position = UDim2.new(0.5, -36, 1, -40)
+	skip.BackgroundColor3 = Color3.fromRGB(40, 40, 58)
+	skip.Text = "Skip"
+	skip.TextColor3 = Color3.fromRGB(200, 200, 220)
+	skip.Font = Enum.Font.Gotham
+	skip.TextSize = 12
+	skip.Visible = false
+	skip.Parent = card
+	local skipC = Instance.new("UICorner")
+	skipC.CornerRadius = UDim.new(0, 6)
+	skipC.Parent = skip
+
+	tween(dim, TweenInfo.new(0.35), {BackgroundTransparency = 0.15})
+	card.Position = UDim2.new(0.5, -40, 0.5, 0)
+	card.BackgroundTransparency = 1
+	tween(card, TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		BackgroundTransparency = 0,
+	})
+
+	local messages = {"Preparing...", "Loading modules...", "Almost ready...", "Finishing..."}
+	local start = tick()
+	local progress = 0
+
+	skip.MouseButton1Click:Connect(function()
+		if progress >= 0.4 then
+			skipped = true
+			done = true
+		end
+	end)
+
+	while not done do
+		local elapsed = tick() - start
+		progress = math.clamp(elapsed / duration, 0, 1)
+		if skipped then progress = 1 end
+		bar.Size = UDim2.new(progress, 0, 1, 0)
+		pct.Text = math.floor(progress * 100) .. "%"
+		status.Text = messages[math.clamp(math.floor(progress * #messages) + 1, 1, #messages)]
+		skip.Visible = progress >= 0.4
+		if progress >= 1 then done = true end
+		task.wait()
+	end
+
+	tween(card, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		Position = UDim2.new(0.5, 60, 0.5, 0),
+		BackgroundTransparency = 1,
+	})
+	tween(dim, TweenInfo.new(0.35), {BackgroundTransparency = 1})
+	task.wait(0.4)
+	gui:Destroy()
+end
+
+local function runTerms()
+	local result = nil
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "ElevatorTerms"
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 10000
+	gui.Parent = pg
+
+	local dim = Instance.new("Frame")
+	dim.Size = UDim2.new(1, 0, 1, 0)
+	dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	dim.BackgroundTransparency = 0.35
+	dim.BorderSizePixel = 0
+	dim.Parent = gui
+
+	local card = Instance.new("Frame")
+	card.Size = UDim2.new(0, 340, 0, 280)
+	card.Position = UDim2.new(0.5, 0, 0.5, 0)
+	card.AnchorPoint = Vector2.new(0.5, 0.5)
+	card.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
+	card.BorderSizePixel = 0
+	card.Parent = dim
+	local cc = Instance.new("UICorner")
+	cc.CornerRadius = UDim.new(0, 14)
+	cc.Parent = card
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(55, 55, 80)
+	stroke.Thickness = 1
+	stroke.Parent = card
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, -28, 0, 28)
+	title.Position = UDim2.new(0, 14, 0, 14)
+	title.BackgroundTransparency = 1
+	title.Text = "Terms of Use"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 18
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Parent = card
+
+	local body = Instance.new("TextLabel")
+	body.Size = UDim2.new(1, -28, 0, 160)
+	body.Position = UDim2.new(0, 14, 0, 48)
+	body.BackgroundTransparency = 1
+	body.Text = "We are not responsible for bans, win streak loss, account warnings, or any other punishment from Roblox or the game.\n\nThis script is provided as-is. Use at your own risk.\n\nBy clicking Agree you accept these terms. You must accept every time you run this script.\n\nDisagree will kick you and the script will not load."
+	body.TextColor3 = Color3.fromRGB(175, 180, 200)
+	body.Font = Enum.Font.Gotham
+	body.TextSize = 13
+	body.TextWrapped = true
+	body.TextXAlignment = Enum.TextXAlignment.Left
+	body.TextYAlignment = Enum.TextYAlignment.Top
+	body.Parent = card
+
+	local agree = Instance.new("TextButton")
+	agree.Size = UDim2.new(0.42, 0, 0, 34)
+	agree.Position = UDim2.new(0.05, 0, 1, -52)
+	agree.BackgroundColor3 = Color3.fromRGB(40, 160, 80)
+	agree.Text = "Agree"
+	agree.TextColor3 = Color3.fromRGB(255, 255, 255)
+	agree.Font = Enum.Font.GothamBold
+	agree.TextSize = 14
+	agree.Parent = card
+	local ac = Instance.new("UICorner")
+	ac.CornerRadius = UDim.new(0, 8)
+	ac.Parent = agree
+
+	local disagree = Instance.new("TextButton")
+	disagree.Size = UDim2.new(0.42, 0, 0, 34)
+	disagree.Position = UDim2.new(0.53, 0, 1, -52)
+	disagree.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+	disagree.Text = "Disagree"
+	disagree.TextColor3 = Color3.fromRGB(255, 255, 255)
+	disagree.Font = Enum.Font.GothamBold
+	disagree.TextSize = 14
+	disagree.Parent = card
+	local dc = Instance.new("UICorner")
+	dc.CornerRadius = UDim.new(0, 8)
+	dc.Parent = disagree
+
+	agree.MouseButton1Click:Connect(function()
+		result = true
+	end)
+	disagree.MouseButton1Click:Connect(function()
+		result = false
+	end)
+
+	while result == nil do
+		task.wait()
+	end
+	gui:Destroy()
+	return result
+end
+
+runLoading()
+local agreed = runTerms()
+if not agreed then
+	pcall(function()
+		player:Kick("You clicked Disagree, so you will not be able to use this script.")
+	end)
+	return
+end
 
 local function runUrl(url)
 	local ok, src = pcall(function()
@@ -37,10 +307,7 @@ local function runUrl(url)
 		return false
 	end
 	local LS = loadstring or load
-	if not LS then
-		warn("[ElevatorHub] loadstring is nil")
-		return false
-	end
+	if not LS then return false end
 	local fn, err = LS(src)
 	if not fn then
 		warn("[ElevatorHub] compile error: ", err)
@@ -54,14 +321,24 @@ local function runUrl(url)
 	return true
 end
 
+pcall(function()
+	pg.ChildAdded:Connect(function(c)
+		if c.Name == "ElevatorLoading" then
+			task.defer(function()
+				pcall(function() c:Destroy() end)
+			end)
+		end
+	end)
+end)
+
 runUrl("https://raw.githubusercontent.com/CatScripterLol/Loader/6dca68e8ff3f20936e95826a2b0e590be21459e9/NormalGames/InsaneElevator")
-task.wait(0.4)
-if not game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui") or not game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("ElevatorTP") then
+task.wait(0.5)
+if not pg:FindFirstChild("ElevatorTP") then
 	runUrl(BASE .. "UI/InsaneElevator")
 end
 task.wait(0.15)
 runUrl(BASE .. "UI/RespawnFix")
-task.wait(0.15)
+task.wait(0.12)
 runUrl(BASE .. "UI/PlayerESP")
-task.wait(0.15)
+task.wait(0.12)
 runUrl(BASE .. "UI/FarmAFK")
