@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.0.4"
+local LOCAL_VERSION = "1.0.5"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 local BASE = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/"
 
@@ -59,7 +59,9 @@ task.wait(0.4)
 if not game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui") or not game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("ElevatorTP") then
 	runUrl(BASE .. "UI/InsaneElevator")
 end
-task.wait(0.2)
+task.wait(0.15)
+runUrl(BASE .. "UI/RespawnFix")
+task.wait(0.15)
 runUrl(BASE .. "UI/PlayerESP")
 task.wait(0.15)
 runUrl(BASE .. "UI/FarmAFK")

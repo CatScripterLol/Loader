@@ -6,7 +6,7 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local VirtualUser = game:GetService("VirtualUser")
 local localPlayer = Hub.player or Players.LocalPlayer
-local pg = Hub.pg
+local pg = Hub.pg or localPlayer:WaitForChild("PlayerGui")
 
 Hub.antiAfk = Hub.antiAfk or false
 Hub.autoFarm = Hub.autoFarm or false
@@ -17,7 +17,7 @@ local afkConn
 local function setAntiAfk(on)
 	Hub.antiAfk = on
 	if afkConn then
-		afkConn:Disconnect()
+		pcall(function() afkConn:Disconnect() end)
 		afkConn = nil
 	end
 	if on then
@@ -41,7 +41,9 @@ end
 local function getHRP()
 	local char = localPlayer.Character
 	if not char then return nil end
-	return char:FindFirstChild("HumanoidRootPart")
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if hrp and hrp.Parent then return hrp end
+	return nil
 end
 
 local function randomFarmPos()
@@ -62,12 +64,15 @@ end
 
 local function farmOnce()
 	local hrp = getHRP()
-	if not hrp then return end
+	if not hrp then
+		task.wait(0.5)
+		return
+	end
 	local target = randomFarmPos()
 	local speed = clampSpeed(Hub.farmSpeed)
 	Hub.farmSpeed = speed
 	local dist = (hrp.Position - target).Magnitude
-	local t = math.clamp(dist / speed, 1, 120)
+	local t = math.clamp(dist / math.max(speed, 1), 1, 120)
 	stopFarmTween()
 	local tw = TweenService:Create(
 		hrp,
@@ -75,8 +80,20 @@ local function farmOnce()
 		{CFrame = CFrame.new(target)}
 	)
 	Hub._farmTween = tw
+	local done = false
+	local c
+	c = tw.Completed:Connect(function()
+		done = true
+		if c then c:Disconnect() end
+	end)
 	tw:Play()
-	tw.Completed:Wait()
+	local t0 = tick()
+	while not done and Hub.autoFarm and farmRunning do
+		if not hrp.Parent then break end
+		if tick() - t0 > t + 2 then break end
+		task.wait(0.1)
+	end
+	pcall(function() if Hub._farmTween then Hub._farmTween:Cancel() end end)
 	Hub._farmTween = nil
 end
 
@@ -85,10 +102,9 @@ local function startAutoFarm()
 	farmRunning = true
 	task.spawn(function()
 		while Hub.autoFarm and farmRunning do
-			local ok, err = pcall(farmOnce)
-			if not ok then warn("[ElevatorHub] farm: ", err) end
-			if not Hub.autoFarm then break end
-			task.wait(0.3)
+			pcall(farmOnce)
+			if not Hub.autoFarm or not farmRunning then break end
+			task.wait(0.25)
 		end
 		farmRunning = false
 		stopFarmTween()
@@ -100,6 +116,10 @@ local function stopAutoFarm()
 	farmRunning = false
 	stopFarmTween()
 end
+
+localPlayer.CharacterRemoving:Connect(function()
+	stopFarmTween()
+end)
 
 local function findMainFrame()
 	local gui = pg:FindFirstChild("ElevatorTP")
@@ -147,7 +167,7 @@ task.spawn(function()
 		if frame then
 			local tabBar = findTabBar(frame)
 			local content = findContent(frame)
-			if tabBar and content then
+			if tabBar and content and not content:FindFirstChild("Farm") then
 				local order = 0
 				for _, btn in pairs(tabBar:GetChildren()) do
 					if btn:IsA("TextButton") then
@@ -165,6 +185,7 @@ task.spawn(function()
 				farmPage.Parent = content
 
 				local farmTab = Instance.new("TextButton")
+				farmTab.Name = "FarmTab"
 				farmTab.Size = UDim2.new(0.25, -2, 1, 0)
 				farmTab.Position = UDim2.new(0.75, 1, 0, 0)
 				farmTab.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
@@ -198,23 +219,27 @@ task.spawn(function()
 
 				local antiBtn = makeBtn(farmPage, "Anti AFK: OFF", 0.06, Color3.fromRGB(180, 50, 50))
 				antiBtn.MouseButton1Click:Connect(function()
-					setAntiAfk(not Hub.antiAfk)
-					antiBtn.Text = Hub.antiAfk and "Anti AFK: ON" or "Anti AFK: OFF"
-					antiBtn.BackgroundColor3 = Hub.antiAfk and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
+					pcall(function()
+						setAntiAfk(not Hub.antiAfk)
+						antiBtn.Text = Hub.antiAfk and "Anti AFK: ON" or "Anti AFK: OFF"
+						antiBtn.BackgroundColor3 = Hub.antiAfk and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
+					end)
 				end)
 
 				local farmBtn = makeBtn(farmPage, "Auto Farm Wins: OFF", 0.22, Color3.fromRGB(180, 50, 50))
 				farmBtn.MouseButton1Click:Connect(function()
-					if Hub.autoFarm then
-						stopAutoFarm()
-						farmBtn.Text = "Auto Farm Wins: OFF"
-						farmBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
-					else
-						Hub.autoFarm = true
-						startAutoFarm()
-						farmBtn.Text = "Auto Farm Wins: ON"
-						farmBtn.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
-					end
+					pcall(function()
+						if Hub.autoFarm then
+							stopAutoFarm()
+							farmBtn.Text = "Auto Farm Wins: OFF"
+							farmBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+						else
+							Hub.autoFarm = true
+							startAutoFarm()
+							farmBtn.Text = "Auto Farm Wins: ON"
+							farmBtn.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
+						end
+					end)
 				end)
 
 				local speedLabel = Instance.new("TextLabel")
