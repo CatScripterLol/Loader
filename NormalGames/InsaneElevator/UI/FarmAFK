@@ -49,7 +49,7 @@ end
 local function randomFarmPos()
 	return Vector3.new(
 		math.random(1, 100),
-		math.random(1800, 1900),
+		1820,
 		math.random(100, 400)
 	)
 end
@@ -293,7 +293,7 @@ task.spawn(function()
 				info.Size = UDim2.new(0.9, 0, 0, 40)
 				info.Position = UDim2.new(0.05, 0, 0.62, 0)
 				info.BackgroundTransparency = 1
-				info.Text = "X 1-100  Y 1800-1900\nZ 100-400  (random)"
+				info.Text = "X 1-100  Y 1820\nZ 100-400  (random)"
 				info.TextColor3 = Color3.fromRGB(140, 145, 165)
 				info.Font = Enum.Font.Gotham
 				info.TextSize = 11
