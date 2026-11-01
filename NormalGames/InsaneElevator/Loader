@@ -1,6 +1,7 @@
-local LOCAL_VERSION = "1.1.1"
+local LOCAL_VERSION = "1.1.2"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 local BASE = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/"
+local CORE = "https://raw.githubusercontent.com/CatScripterLol/Loader/6dca68e8ff3f20936e95826a2b0e590be21459e9/NormalGames/InsaneElevator"
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -25,7 +26,7 @@ end
 if checkVersion() then return end
 task.spawn(function()
 	while true do
-		task.wait(8)
+		task.wait(1)
 		if checkVersion() then break end
 	end
 end)
@@ -278,14 +279,8 @@ if not agreed then
 	return
 end
 
-local function runUrl(url)
-	local ok, src = pcall(function()
-		return game:HttpGet(url)
-	end)
-	if not ok or type(src) ~= "string" or src == "" then
-		warn("[ElevatorHub] download failed: ", url, src)
-		return false
-	end
+local function execSrc(src)
+	if type(src) ~= "string" or src == "" then return false end
 	local LS = loadstring or load
 	if not LS then return false end
 	local fn, err = LS(src)
@@ -301,6 +296,14 @@ local function runUrl(url)
 	return true
 end
 
+local function fetch(url)
+	local ok, src = pcall(function()
+		return game:HttpGet(url)
+	end)
+	if ok and type(src) == "string" and src ~= "" then return src end
+	return nil
+end
+
 pcall(function()
 	pg.ChildAdded:Connect(function(c)
 		if c.Name == "ElevatorLoading" then
@@ -311,14 +314,30 @@ pcall(function()
 	end)
 end)
 
-runUrl("https://raw.githubusercontent.com/CatScripterLol/Loader/6dca68e8ff3f20936e95826a2b0e590be21459e9/NormalGames/InsaneElevator")
-task.wait(0.5)
-if not pg:FindFirstChild("ElevatorTP") then
-	runUrl(BASE .. "UI/InsaneElevator")
+local urls = {
+	CORE,
+	BASE .. "UI/InsaneElevator",
+	BASE .. "UI/RespawnFix",
+	BASE .. "UI/PlayerESP",
+	BASE .. "UI/FarmAFK",
+}
+local sources = {}
+local pending = #urls
+for i, url in ipairs(urls) do
+	task.spawn(function()
+		sources[i] = fetch(url)
+		pending = pending - 1
+	end)
 end
-task.wait(0.15)
-runUrl(BASE .. "UI/RespawnFix")
-task.wait(0.12)
-runUrl(BASE .. "UI/PlayerESP")
-task.wait(0.12)
-runUrl(BASE .. "UI/FarmAFK")
+local t0 = tick()
+while pending > 0 and tick() - t0 < 15 do
+	task.wait()
+end
+
+execSrc(sources[1])
+if not pg:FindFirstChild("ElevatorTP") then
+	execSrc(sources[2])
+end
+execSrc(sources[3])
+execSrc(sources[4])
+execSrc(sources[5])
