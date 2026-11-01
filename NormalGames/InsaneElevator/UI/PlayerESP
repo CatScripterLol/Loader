@@ -1,0 +1,129 @@
+local env = (typeof(getgenv) == "function" and getgenv()) or _G
+local Hub = env.ElevatorHub
+if not Hub then return end
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local localPlayer = Hub.player or Players.LocalPlayer
+local pg = Hub.pg
+
+Hub.playerESP = Hub.playerESP or false
+Hub.playerHighlights = Hub.playerHighlights or {}
+
+local function findEspPage()
+	local gui = pg:FindFirstChild("ElevatorTP")
+	if not gui then return nil end
+	local frame = gui:FindFirstChild("Frame")
+	if not frame then return nil end
+	local content = nil
+	for _, c in pairs(frame:GetChildren()) do
+		if c:IsA("Frame") and c.Position.Y.Offset >= 50 then
+			content = c
+			break
+		end
+	end
+	if not content then return nil end
+	return content:FindFirstChild("ESP")
+end
+
+local function makeBtn(parent, text, y, color)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0.9, 0, 0, 26)
+	btn.Position = UDim2.new(0.05, 0, y, 0)
+	btn.BackgroundColor3 = color
+	btn.Text = text
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.Font = Enum.Font.Gotham
+	btn.TextSize = 12
+	btn.Parent = parent
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 5)
+	c.Parent = btn
+	return btn
+end
+
+task.spawn(function()
+	for _ = 1, 50 do
+		local page = findEspPage()
+		if page then
+			local playerESPBtn = makeBtn(page, "ESP Players: OFF", 0.56, Color3.fromRGB(180, 50, 50))
+			playerESPBtn.MouseButton1Click:Connect(function()
+				Hub.playerESP = not Hub.playerESP
+				if not Hub.playerESP then
+					Hub.clearHighlights(Hub.playerHighlights)
+					for _, p in pairs(Players:GetPlayers()) do
+						if p ~= localPlayer and p.Character then
+							local tag = p.Character:FindFirstChild("ElevatorNameTag")
+							if tag then tag:Destroy() end
+						end
+					end
+				end
+				playerESPBtn.Text = Hub.playerESP and "ESP Players: ON" or "ESP Players: OFF"
+				playerESPBtn.BackgroundColor3 = Hub.playerESP and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
+			end)
+			break
+		end
+		task.wait(0.1)
+	end
+end)
+
+local function ensureNameTag(model, text, color)
+	local head = model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart")
+	if not head then return end
+	local old = model:FindFirstChild("ElevatorNameTag")
+	if old then
+		local lbl = old:FindFirstChildOfClass("TextLabel")
+		if lbl and lbl.Text == text then return end
+		old:Destroy()
+	end
+	local bb = Instance.new("BillboardGui")
+	bb.Name = "ElevatorNameTag"
+	bb.Size = UDim2.new(0, 140, 0, 28)
+	bb.StudsOffset = Vector3.new(0, 2.5, 0)
+	bb.AlwaysOnTop = true
+	bb.Adornee = head
+	bb.Parent = model
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, 0, 1, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.TextColor3 = color
+	lbl.Font = Enum.Font.GothamBold
+	lbl.TextSize = 14
+	lbl.TextStrokeTransparency = 0.4
+	lbl.Parent = bb
+end
+
+local lastTick = 0
+RunService.Heartbeat:Connect(function()
+	local now = tick()
+	if now - lastTick < 0.45 then return end
+	lastTick = now
+
+	for _, plr in pairs(Players:GetPlayers()) do
+		if plr ~= localPlayer then
+			local char = plr.Character
+			if Hub.playerESP and char then
+				Hub.applyHighlight(char, Color3.fromRGB(60, 180, 255), Hub.playerHighlights)
+				ensureNameTag(char, "Player: " .. plr.Name, Color3.fromRGB(100, 200, 255))
+			elseif char then
+				local tag = char:FindFirstChild("ElevatorNameTag")
+				if tag then tag:Destroy() end
+			end
+		end
+	end
+	if not Hub.playerESP then
+		Hub.clearHighlights(Hub.playerHighlights)
+	end
+
+	for _, v in pairs(workspace:GetDescendants()) do
+		if v:IsA("Model") and Hub.isKiller and Hub.isKiller(v) then
+			if Hub.killerESP then
+				ensureNameTag(v, "Killer: " .. v.Name, Color3.fromRGB(255, 80, 80))
+			else
+				local tag = v:FindFirstChild("ElevatorNameTag")
+				if tag then tag:Destroy() end
+			end
+		end
+	end
+end)
