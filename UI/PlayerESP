@@ -4,7 +4,7 @@ if not Hub then return end
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local player = Hub.player
+local localPlayer = Hub.player or Players.LocalPlayer
 local pg = Hub.pg
 
 Hub.playerESP = Hub.playerESP or false
@@ -52,7 +52,7 @@ task.spawn(function()
 				if not Hub.playerESP then
 					Hub.clearHighlights(Hub.playerHighlights)
 					for _, p in pairs(Players:GetPlayers()) do
-						if p.Character then
+						if p ~= localPlayer and p.Character then
 							local tag = p.Character:FindFirstChild("ElevatorNameTag")
 							if tag then tag:Destroy() end
 						end
@@ -66,57 +66,6 @@ task.spawn(function()
 		task.wait(0.1)
 	end
 end)
-
-local whoGui = Instance.new("ScreenGui")
-whoGui.Name = "ElevatorWho"
-whoGui.ResetOnSpawn = false
-whoGui.Parent = pg
-
-local whoFrame = Instance.new("Frame")
-whoFrame.Size = UDim2.new(0, 200, 0, 160)
-whoFrame.Position = UDim2.new(1, -210, 0.35, 0)
-whoFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-whoFrame.BorderSizePixel = 0
-whoFrame.Active = true
-whoFrame.Draggable = true
-whoFrame.Parent = whoGui
-local whoCorner = Instance.new("UICorner")
-whoCorner.CornerRadius = UDim.new(0, 8)
-whoCorner.Parent = whoFrame
-
-local whoTitle = Instance.new("TextLabel")
-whoTitle.Size = UDim2.new(1, 0, 0, 24)
-whoTitle.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-whoTitle.Text = "Who's Who"
-whoTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-whoTitle.Font = Enum.Font.GothamBold
-whoTitle.TextSize = 12
-whoTitle.Parent = whoFrame
-local whoTitleC = Instance.new("UICorner")
-whoTitleC.CornerRadius = UDim.new(0, 8)
-whoTitleC.Parent = whoTitle
-
-local whoScroll = Instance.new("ScrollingFrame")
-whoScroll.Size = UDim2.new(1, -10, 1, -30)
-whoScroll.Position = UDim2.new(0, 5, 0, 26)
-whoScroll.BackgroundTransparency = 1
-whoScroll.BorderSizePixel = 0
-whoScroll.ScrollBarThickness = 4
-whoScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-whoScroll.Parent = whoFrame
-
-local whoList = Instance.new("TextLabel")
-whoList.Size = UDim2.new(1, -4, 0, 120)
-whoList.BackgroundTransparency = 1
-whoList.Text = "Players: -\nKillers: -"
-whoList.TextColor3 = Color3.fromRGB(200, 200, 210)
-whoList.Font = Enum.Font.Gotham
-whoList.TextSize = 12
-whoList.TextXAlignment = Enum.TextXAlignment.Left
-whoList.TextYAlignment = Enum.TextYAlignment.Top
-whoList.TextWrapped = true
-whoList.RichText = true
-whoList.Parent = whoScroll
 
 local function ensureNameTag(model, text, color)
 	local head = model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart")
@@ -145,24 +94,22 @@ local function ensureNameTag(model, text, color)
 	lbl.Parent = bb
 end
 
-local lastWho = 0
+local lastTick = 0
 RunService.Heartbeat:Connect(function()
 	local now = tick()
-	if now - lastWho < 0.45 then return end
-	lastWho = now
-
-	local playerNames = {}
-	local killerNames = {}
+	if now - lastTick < 0.45 then return end
+	lastTick = now
 
 	for _, plr in pairs(Players:GetPlayers()) do
-		table.insert(playerNames, plr.Name)
-		local char = plr.Character
-		if Hub.playerESP and char then
-			Hub.applyHighlight(char, Color3.fromRGB(60, 180, 255), Hub.playerHighlights)
-			ensureNameTag(char, "Player: " .. plr.Name, Color3.fromRGB(100, 200, 255))
-		elseif char then
-			local tag = char:FindFirstChild("ElevatorNameTag")
-			if tag then tag:Destroy() end
+		if plr ~= localPlayer then
+			local char = plr.Character
+			if Hub.playerESP and char then
+				Hub.applyHighlight(char, Color3.fromRGB(60, 180, 255), Hub.playerHighlights)
+				ensureNameTag(char, "Player: " .. plr.Name, Color3.fromRGB(100, 200, 255))
+			elseif char then
+				local tag = char:FindFirstChild("ElevatorNameTag")
+				if tag then tag:Destroy() end
+			end
 		end
 	end
 	if not Hub.playerESP then
@@ -171,7 +118,6 @@ RunService.Heartbeat:Connect(function()
 
 	for _, v in pairs(workspace:GetDescendants()) do
 		if v:IsA("Model") and Hub.isKiller and Hub.isKiller(v) then
-			table.insert(killerNames, v.Name)
 			if Hub.killerESP then
 				ensureNameTag(v, "Killer: " .. v.Name, Color3.fromRGB(255, 80, 80))
 			else
@@ -180,12 +126,4 @@ RunService.Heartbeat:Connect(function()
 			end
 		end
 	end
-
-	local pText = #playerNames > 0 and table.concat(playerNames, ", ") or "-"
-	local kText = #killerNames > 0 and table.concat(killerNames, ", ") or "-"
-	whoList.Text = '<font color="#7ec8ff">Players:</font> ' .. pText
-		.. '\n<font color="#ff7e7e">Killers:</font> ' .. kText
-	local h = 40 + math.floor((#pText + #kText) / 24) * 14
-	whoList.Size = UDim2.new(1, -4, 0, math.max(50, h))
-	whoScroll.CanvasSize = UDim2.new(0, 0, 0, whoList.Size.Y.Offset)
 end)
