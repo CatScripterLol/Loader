@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.0.5"
+local LOCAL_VERSION = "1.0.4"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 local BASE = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/"
 
