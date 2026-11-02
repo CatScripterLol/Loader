@@ -1,0 +1,35 @@
+local ALLOWED_PLACE = 4104106043
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local TweenService = game:GetService("TweenService")
+local VirtualUser = game:GetService("VirtualUser")
+
+local player = Players.LocalPlayer
+if not player then return end
+local pg = player:WaitForChild("PlayerGui")
+
+if game.PlaceId ~= ALLOWED_PLACE then
+	warn("[ElevatorHub] Wrong place. Expected " .. tostring(ALLOWED_PLACE))
+	return
+end
+
+local env = (typeof(getgenv) == "function" and getgenv()) or _G
+env.ElevatorHub = env.ElevatorHub or {}
+local Hub = env.ElevatorHub
+Hub.player = player
+Hub.pg = pg
+
+local uiSrc = nil
+local uiReady = false
+task.spawn(function()
+	local ok, src = pcall(function()
+		return game:HttpGet("https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/UI/InsaneElevator")
+	end)
+	if ok and type(src) == "string" and src ~= "" then
+		uiSrc = src
+	end
+	uiReady = true
+end)
+
+-- PLACEHOLDER_REST_OF_MAINA
