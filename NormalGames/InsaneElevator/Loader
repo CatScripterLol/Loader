@@ -1,34 +1,9 @@
-local LOCAL_VERSION = "1.3.2"
-local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 local BASE = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/"
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 local pg = player:WaitForChild("PlayerGui")
-
-local function checkVersion()
-	local ok, remote = pcall(function()
-		return game:HttpGet(VERSION_URL .. "?t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(1, 999999999)))
-	end)
-	if not ok or type(remote) ~= "string" then return false end
-	remote = remote:gsub("%s+", "")
-	if remote ~= "" and remote ~= LOCAL_VERSION then
-		pcall(function()
-			player:Kick("ElevatorHub updated (v" .. tostring(remote) .. "). Re-execute the loadstring.")
-		end)
-		return true
-	end
-	return false
-end
-
-if checkVersion() then return end
-task.spawn(function()
-	while true do
-		task.wait(1)
-		if checkVersion() then break end
-	end
-end)
 
 local function tween(obj, ti, props)
 	local t = TweenService:Create(obj, ti, props)
@@ -38,15 +13,13 @@ end
 
 local function runLoading()
 	local done, skipped = false, false
-	local duration = 4 + math.random() * 4
+	local duration = 2 + math.random()
 	local gui = Instance.new("ScreenGui")
 	gui.Name, gui.IgnoreGuiInset, gui.ResetOnSpawn, gui.DisplayOrder = "ElevatorBoot", true, false, 9999
 	gui.Parent = pg
 	local panel = Instance.new("Frame")
 	panel.Size, panel.Position = UDim2.new(1, 0, 1, 0), UDim2.new(1, 0, 0, 0)
 	panel.BackgroundColor3, panel.BorderSizePixel, panel.Parent = Color3.fromRGB(10, 10, 16), 0, gui
-	local accent = Instance.new("Frame")
-	accent.Size, accent.BackgroundColor3, accent.BorderSizePixel, accent.Parent = UDim2.new(0, 4, 1, 0), Color3.fromRGB(90, 120, 255), 0, panel
 	local title = Instance.new("TextLabel")
 	title.Size, title.Position, title.BackgroundTransparency = UDim2.new(1, -40, 0, 36), UDim2.new(0, 28, 0.38, 0), 1
 	title.Text, title.TextColor3, title.Font, title.TextSize = "ElevatorHub", Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold, 32
@@ -75,8 +48,8 @@ local function runLoading()
 	skip.BackgroundColor3, skip.Text, skip.TextColor3 = Color3.fromRGB(40, 40, 58), "Skip", Color3.fromRGB(210, 210, 230)
 	skip.Font, skip.TextSize, skip.Visible, skip.Parent = Enum.Font.GothamBold, 13, false, panel
 	Instance.new("UICorner", skip).CornerRadius = UDim.new(0, 8)
-	tween(panel, TweenInfo.new(0.55, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}).Completed:Wait()
-	local messages = {"Preparing...", "Loading modules...", "Almost ready...", "Finishing..."}
+	tween(panel, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}).Completed:Wait()
+	local messages = {"Preparing...", "Loading...", "Almost ready...", "Finishing..."}
 	local start, progress = tick(), 0
 	skip.MouseButton1Click:Connect(function()
 		if progress >= 0.4 then skipped, done = true, true end
@@ -89,9 +62,9 @@ local function runLoading()
 		status.Text = messages[math.clamp(math.floor(progress * #messages) + 1, 1, #messages)]
 		skip.Visible = progress >= 0.4
 		if progress >= 1 then done = true end
-		task.wait()
+		task.wait(0.05)
 	end
-	tween(panel, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(-1, 0, 0, 0)}).Completed:Wait()
+	tween(panel, TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(-1, 0, 0, 0)}).Completed:Wait()
 	gui:Destroy()
 end
 
@@ -128,7 +101,7 @@ local function runTerms()
 	Instance.new("UICorner", disagree).CornerRadius = UDim.new(0, 8)
 	agree.MouseButton1Click:Connect(function() result = true end)
 	disagree.MouseButton1Click:Connect(function() result = false end)
-	while result == nil do task.wait() end
+	while result == nil do task.wait(0.05) end
 	gui:Destroy()
 	return result
 end
