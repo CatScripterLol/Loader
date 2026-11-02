@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.3.8"
+local LOCAL_VERSION = "1.3.9"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 
 local ALLOWED_PLACE = 4104106043
@@ -70,6 +70,8 @@ Hub._lightingBackup = nil
 Hub._skyBackup = nil
 Hub._cleanConn = nil
 Hub._radioConn = nil
+Hub._radioPlayerConn = nil
+Hub._floorChildConn = nil
 Hub._mutedSounds = {}
 
 local COL_OFF = Color3.fromRGB(55, 55, 70)
@@ -146,67 +148,88 @@ function Hub.isKiller(model)
 	return false
 end
 
-local function isRadioSound(v)
-	if not v or not v:IsA("Sound") then return false end
-	local n = string.lower(v.Name)
-	if string.find(n, "radio") or string.find(n, "music") or string.find(n, "broadcast")
-		or string.find(n, "speaker") or string.find(n, "song") or string.find(n, "bgm")
-		or string.find(n, "lobby") or string.find(n, "theme") then
-		return true
-	end
-	return false
+local function isRadioName(n)
+	n = string.lower(tostring(n or ""))
+	return string.find(n, "radio") ~= nil
 end
 
-function Hub.muteRadioSound(v)
-	if not isRadioSound(v) then return end
+function Hub.removeRadiosFromEveryone()
 	pcall(function()
-		if not Hub._mutedSounds[v] then
-			Hub._mutedSounds[v] = {Volume = v.Volume, Playing = v.Playing}
+		for _, plr in pairs(Players:GetPlayers()) do
+			local function wipe(parent)
+				if not parent then return end
+				for _, t in pairs(parent:GetChildren()) do
+					if t:IsA("Tool") or t:IsA("HopperBin") then
+						if isRadioName(t.Name) then
+							pcall(function() t:Destroy() end)
+						end
+					end
+				end
+			end
+			wipe(plr:FindFirstChild("Backpack"))
+			wipe(plr.Character)
+			wipe(plr:FindFirstChild("StarterGear"))
 		end
-		v.Volume = 0
-		v:Stop()
-	end)
-end
-
-function Hub.restoreRadioSounds()
-	pcall(function()
-		for snd, data in pairs(Hub._mutedSounds) do
-			if snd and snd.Parent then
-				pcall(function()
-					snd.Volume = data.Volume or 1
-					if data.Playing then snd:Play() end
-				end)
+		for _, v in pairs(workspace:GetDescendants()) do
+			if v:IsA("Tool") and isRadioName(v.Name) then
+				pcall(function() v:Destroy() end)
+			elseif v:IsA("Sound") and isRadioName(v.Name) then
+				pcall(function() v.Volume = 0 v:Stop() v:Destroy() end)
 			end
 		end
-		table.clear(Hub._mutedSounds)
+		for _, v in pairs(SoundService:GetDescendants()) do
+			if v:IsA("Sound") and isRadioName(v.Name) then
+				pcall(function() v.Volume = 0 v:Stop() v:Destroy() end)
+			end
+		end
 	end)
 end
 
 function Hub.handleAntiRadio()
-	pcall(function()
-		for _, parent in pairs({workspace, SoundService}) do
-			for _, v in pairs(parent:GetDescendants()) do
-				Hub.muteRadioSound(v)
-			end
-		end
-	end)
+	if not Hub.antiRadio then return end
+	Hub.removeRadiosFromEveryone()
 end
 
 function Hub.setAntiRadio(on)
 	Hub.antiRadio = on and true or false
-	if Hub._radioConn then
-		pcall(function() Hub._radioConn:Disconnect() end)
-		Hub._radioConn = nil
-	end
+	if Hub._radioConn then pcall(function() Hub._radioConn:Disconnect() end) Hub._radioConn = nil end
+	if Hub._radioPlayerConn then pcall(function() Hub._radioPlayerConn:Disconnect() end) Hub._radioPlayerConn = nil end
 	if on then
-		Hub.handleAntiRadio()
+		Hub.removeRadiosFromEveryone()
 		Hub._radioConn = workspace.DescendantAdded:Connect(function(obj)
-			if Hub.antiRadio and obj:IsA("Sound") then
-				task.defer(function() Hub.muteRadioSound(obj) end)
-			end
+			if not Hub.antiRadio then return end
+			task.defer(function()
+				if not obj or not obj.Parent then return end
+				if (obj:IsA("Tool") or obj:IsA("HopperBin")) and isRadioName(obj.Name) then
+					pcall(function() obj:Destroy() end)
+				elseif obj:IsA("Sound") and isRadioName(obj.Name) then
+					pcall(function() obj.Volume = 0 obj:Stop() obj:Destroy() end)
+				end
+			end)
 		end)
-	else
-		Hub.restoreRadioSounds()
+		local function hookContainer(cont)
+			if not cont then return end
+			cont.ChildAdded:Connect(function(c)
+				if Hub.antiRadio and (c:IsA("Tool") or c:IsA("HopperBin")) and isRadioName(c.Name) then
+					task.defer(function() pcall(function() c:Destroy() end) end)
+				end
+			end)
+		end
+		for _, plr in pairs(Players:GetPlayers()) do
+			hookContainer(plr:FindFirstChild("Backpack"))
+			if plr.Character then hookContainer(plr.Character) end
+			plr.CharacterAdded:Connect(function(char)
+				hookContainer(char)
+				if Hub.antiRadio then Hub.removeRadiosFromEveryone() end
+			end)
+		end
+		Hub._radioPlayerConn = Players.PlayerAdded:Connect(function(plr)
+			task.defer(function()
+				local bp = plr:WaitForChild("Backpack", 10)
+				hookContainer(bp)
+				plr.CharacterAdded:Connect(function(char) hookContainer(char) end)
+			end)
+		end)
 	end
 end
 
@@ -247,29 +270,19 @@ end
 
 function Hub.setCleanVision(on)
 	Hub.cleanVision = on and true or false
-	if Hub._cleanConn then
-		pcall(function() Hub._cleanConn:Disconnect() end)
-		Hub._cleanConn = nil
-	end
+	if Hub._cleanConn then pcall(function() Hub._cleanConn:Disconnect() end) Hub._cleanConn = nil end
 	pcall(function()
 		if on then
 			if not Hub._lightingBackup then
 				Hub._lightingBackup = {
-					FogEnd = Lighting.FogEnd,
-					FogStart = Lighting.FogStart,
-					FogColor = Lighting.FogColor,
-					Brightness = Lighting.Brightness,
-					Ambient = Lighting.Ambient,
-					OutdoorAmbient = Lighting.OutdoorAmbient,
+					FogEnd = Lighting.FogEnd, FogStart = Lighting.FogStart, FogColor = Lighting.FogColor,
+					Brightness = Lighting.Brightness, Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient,
 				}
 			end
 			if not Hub._skyBackup then
 				Hub._skyBackup = {}
 				for _, v in pairs(Lighting:GetChildren()) do
-					if v:IsA("Sky") then
-						table.insert(Hub._skyBackup, v:Clone())
-						v:Destroy()
-					end
+					if v:IsA("Sky") then table.insert(Hub._skyBackup, v:Clone()) v:Destroy() end
 				end
 			end
 			enforceCleanVision()
@@ -298,14 +311,10 @@ function Hub.setCleanVision(on)
 					or v:IsA("DepthOfFieldEffect") or v:IsA("SunRaysEffect") or v:IsA("Atmosphere") then
 					pcall(function() v.Enabled = true end)
 				end
-				if v:IsA("Sky") and v.Name == "ElevatorDefaultSky" then
-					v:Destroy()
-				end
+				if v:IsA("Sky") and v.Name == "ElevatorDefaultSky" then v:Destroy() end
 			end
 			if Hub._skyBackup then
-				for _, s in pairs(Hub._skyBackup) do
-					s.Parent = Lighting
-				end
+				for _, s in pairs(Hub._skyBackup) do s.Parent = Lighting end
 				Hub._skyBackup = nil
 			end
 			Hub._lightingBackup = nil
@@ -314,63 +323,61 @@ function Hub.setCleanVision(on)
 end
 
 function Hub.scanFloor()
-	local name = "Unknown"
+	local result = Hub.lastFloorName or "Unknown"
 	pcall(function()
-		local function readVal(o)
-			if not o then return nil end
-			if o:IsA("StringValue") or o:IsA("NumberValue") or o:IsA("IntValue") then return tostring(o.Value) end
-			if o:IsA("TextLabel") or o:IsA("TextButton") then
-				local t = tostring(o.Text or "")
-				if t ~= "" and t ~= "Floor" then return t end
-			end
-			local sv = o:FindFirstChildWhichIsA("StringValue") or o:FindFirstChildWhichIsA("NumberValue")
-			if sv then return tostring(sv.Value) end
-			local tl = o:FindFirstChildWhichIsA("TextLabel", true)
-			if tl and tl.Text and tl.Text ~= "" then return tostring(tl.Text) end
-			return o.Name
-		end
-		local tryNames = {"CurrentFloor", "Floor", "FloorName", "CurrentFloorName", "ActiveFloor"}
-		for _, n in pairs(tryNames) do
-			local o = workspace:FindFirstChild(n, true) or RS:FindFirstChild(n, true)
-			if o then
-				local v = readVal(o)
-				if v and v ~= "" and string.lower(v) ~= "currentfloor" and string.lower(v) ~= "floor" then
-					name = v
-					break
-				end
-			end
-		end
-		if name == "Unknown" then
-			for _, v in pairs(player.PlayerGui:GetDescendants()) do
-				if v:IsA("TextLabel") or v:IsA("TextButton") then
-					local t = tostring(v.Text or "")
-					local ln = string.lower(t)
-					if string.find(ln, "floor") and #t < 80 then
-						name = t
-						break
+		local skip = {
+			elevator=true, baseplate=true, camera=true, terrain=true, lobby=true,
+			shop=true, spawn=true, map=true, parts=true, folder=true,
+		}
+		for _, v in pairs(workspace:GetChildren()) do
+			if v:IsA("Model") or v:IsA("Folder") then
+				local n = v.Name
+				local ln = string.lower(n)
+				if not Players:FindFirstChild(n) and not skip[ln] and #n > 2
+					and not string.find(ln, "elevator") and not string.find(ln, "spawn")
+					and not string.find(ln, "lobby") and not string.find(ln, "shop")
+					and not string.find(ln, "vip") and not string.find(ln, "camera") then
+					if v:FindFirstChildOfClass("Humanoid") or v:FindFirstChild("Map")
+						or v:FindFirstChild("Floor") or string.find(ln, "floor")
+						or string.find(ln, "killer") or string.find(ln, "boss")
+						or string.find(ln, "trex") or string.find(ln, "terminator")
+						or string.find(ln, "john") or string.find(ln, "scp")
+						or string.find(ln, "granny") or string.find(ln, "piggy")
+						or string.find(ln, "slender") or string.find(ln, "siren")
+						or string.find(ln, "jeff") or string.find(ln, "baldi")
+						or string.find(ln, "among") or string.find(ln, "alien")
+						or string.find(ln, "cartoon") or string.find(ln, "penny")
+						or string.find(ln, "puppet") or string.find(ln, "entity") then
+						result = n
 					end
 				end
 			end
 		end
-		if name == "Unknown" then
-			for _, v in pairs(workspace:GetChildren()) do
-				local ln = string.lower(v.Name)
-				if (string.find(ln, "floor") or string.find(ln, "stage")) and not string.find(ln, "elevator") then
-					if v:IsA("Folder") or v:IsA("Model") or v:IsA("StringValue") then
-						name = readVal(v) or v.Name
-						break
-					end
-				end
+		local cf = workspace:FindFirstChild("CurrentFloor") or RS:FindFirstChild("CurrentFloor")
+		if cf then
+			if cf:IsA("StringValue") or cf:IsA("NumberValue") or cf:IsA("IntValue") then
+				result = tostring(cf.Value)
+			else
+				result = cf.Name
+			end
+		end
+		for _, v in pairs(pg:GetDescendants()) do
+			if (v:IsA("TextLabel") or v:IsA("TextButton")) and v.Text then
+				local t = tostring(v.Text)
+				local match = string.match(t, "[Ff]loor%s*[#:]?%s*(%d+)")
+				if match then result = "Floor " .. match break end
+				local ln = string.lower(t)
+				if string.find(ln, "floor") and #t < 40 and #t > 3 then result = t break end
 			end
 		end
 	end)
-	Hub.lastFloorName = name
-	return name
+	if result and result ~= "" then Hub.lastFloorName = result end
+	return Hub.lastFloorName or "Unknown"
 end
 
 function Hub.predictFloor()
 	local current = Hub.scanFloor()
-	local nextName = nil
+	local nextName = "waiting..."
 	pcall(function()
 		local candidates = {
 			workspace:FindFirstChild("NextFloor"),
@@ -381,18 +388,10 @@ function Hub.predictFloor()
 		}
 		for _, o in pairs(candidates) do
 			if o then
-				if o:IsA("StringValue") or o:IsA("NumberValue") then nextName = tostring(o.Value) break end
-				nextName = o.Name
-				break
-			end
-		end
-		if not nextName then
-			for _, v in pairs(workspace:GetDescendants()) do
-				local n = string.lower(v.Name)
-				if (string.find(n, "nextfloor") or string.find(n, "upcoming")) and (v:IsA("StringValue") or v:IsA("NumberValue")) then
-					nextName = tostring(v.Value)
-					break
+				if o:IsA("StringValue") or o:IsA("NumberValue") or o:IsA("IntValue") then
+					nextName = tostring(o.Value) break
 				end
+				nextName = o.Name break
 			end
 		end
 		local queue = workspace:FindFirstChild("FloorQueue") or RS:FindFirstChild("FloorQueue")
@@ -411,7 +410,6 @@ function Hub.predictFloor()
 			if #hist > 8 then table.remove(hist, 1) end
 		end
 	end
-	if not nextName then nextName = "waiting..." end
 	Hub.predictedFloor = nextName
 	return current, Hub.predictedFloor
 end
@@ -434,6 +432,19 @@ function Hub.getGodUsers()
 		end
 	end)
 	return list
+end
+
+if not Hub._floorChildConn then
+	Hub._floorChildConn = workspace.ChildAdded:Connect(function(child)
+		task.wait(0.25)
+		if not child or not child.Parent then return end
+		local n = string.lower(child.Name)
+		if (child:IsA("Model") or child:IsA("Folder"))
+			and not string.find(n, "elevator") and not string.find(n, "spawn")
+			and not string.find(n, "lobby") and not Players:FindFirstChild(child.Name) then
+			Hub.lastFloorName = child.Name
+		end
+	end)
 end
 
 local godLabel, floorLabel, predLabel
