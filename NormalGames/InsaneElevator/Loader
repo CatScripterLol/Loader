@@ -17,54 +17,89 @@ local function runLoading()
 	local gui = Instance.new("ScreenGui")
 	gui.Name, gui.IgnoreGuiInset, gui.ResetOnSpawn, gui.DisplayOrder = "ElevatorBoot", true, false, 9999
 	gui.Parent = pg
+
 	local panel = Instance.new("Frame")
 	panel.Size, panel.Position = UDim2.new(1, 0, 1, 0), UDim2.new(1, 0, 0, 0)
 	panel.BackgroundColor3, panel.BorderSizePixel, panel.Parent = Color3.fromRGB(10, 10, 16), 0, gui
+
 	local title = Instance.new("TextLabel")
 	title.Size, title.Position, title.BackgroundTransparency = UDim2.new(1, -40, 0, 36), UDim2.new(0, 28, 0.38, 0), 1
 	title.Text, title.TextColor3, title.Font, title.TextSize = "ElevatorHub", Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold, 32
 	title.TextXAlignment, title.Parent = Enum.TextXAlignment.Left, panel
+
 	local sub = Instance.new("TextLabel")
 	sub.Size, sub.Position, sub.BackgroundTransparency = UDim2.new(1, -40, 0, 22), UDim2.new(0, 28, 0.38, 40), 1
 	sub.Text, sub.TextColor3, sub.Font, sub.TextSize = "Insane Elevator", Color3.fromRGB(130, 140, 170), Enum.Font.Gotham, 16
 	sub.TextXAlignment, sub.Parent = Enum.TextXAlignment.Left, panel
+
 	local status = Instance.new("TextLabel")
 	status.Size, status.Position, status.BackgroundTransparency = UDim2.new(0.6, 0, 0, 18), UDim2.new(0, 28, 0.55, 0), 1
 	status.Text, status.TextColor3, status.Font, status.TextSize = "Preparing...", Color3.fromRGB(160, 165, 190), Enum.Font.Gotham, 14
 	status.TextXAlignment, status.Parent = Enum.TextXAlignment.Left, panel
+
 	local pct = Instance.new("TextLabel")
 	pct.Size, pct.Position, pct.BackgroundTransparency = UDim2.new(0, 70, 0, 18), UDim2.new(1, -100, 0.55, 0), 1
 	pct.Text, pct.TextColor3, pct.Font, pct.TextSize = "0%", Color3.fromRGB(210, 215, 240), Enum.Font.GothamBold, 14
 	pct.TextXAlignment, pct.Parent = Enum.TextXAlignment.Right, panel
+
 	local barBg = Instance.new("Frame")
 	barBg.Size, barBg.Position = UDim2.new(1, -56, 0, 10), UDim2.new(0, 28, 0.55, 28)
 	barBg.BackgroundColor3, barBg.BorderSizePixel, barBg.Parent = Color3.fromRGB(32, 32, 48), 0, panel
 	Instance.new("UICorner", barBg).CornerRadius = UDim.new(1, 0)
+	local barClip = Instance.new("Frame")
+	barClip.Size, barClip.BackgroundTransparency, barClip.ClipsDescendants, barClip.BorderSizePixel = UDim2.new(1, 0, 1, 0), 1, true, 0
+	barClip.Parent = barBg
 	local bar = Instance.new("Frame")
-	bar.Size, bar.BackgroundColor3, bar.BorderSizePixel, bar.Parent = UDim2.new(0, 0, 1, 0), Color3.fromRGB(90, 120, 255), 0, barBg
+	bar.Size, bar.BackgroundColor3, bar.BorderSizePixel, bar.Parent = UDim2.new(0, 0, 1, 0), Color3.fromRGB(90, 120, 255), 0, barClip
 	Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+	local glow = Instance.new("Frame")
+	glow.Size, glow.Position = UDim2.new(0, 24, 1, 0), UDim2.new(1, -24, 0, 0)
+	glow.BackgroundColor3, glow.BorderSizePixel, glow.Parent = Color3.fromRGB(160, 180, 255), 0, bar
+	glow.BackgroundTransparency = 0.45
+	Instance.new("UICorner", glow).CornerRadius = UDim.new(1, 0)
+
 	local skip = Instance.new("TextButton")
 	skip.Size, skip.Position = UDim2.new(0, 90, 0, 32), UDim2.new(0.5, -45, 0.72, 0)
 	skip.BackgroundColor3, skip.Text, skip.TextColor3 = Color3.fromRGB(40, 40, 58), "Skip", Color3.fromRGB(210, 210, 230)
 	skip.Font, skip.TextSize, skip.Visible, skip.Parent = Enum.Font.GothamBold, 13, false, panel
 	Instance.new("UICorner", skip).CornerRadius = UDim.new(0, 8)
-	tween(panel, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}).Completed:Wait()
-	local messages = {"Preparing...", "Loading...", "Almost ready...", "Finishing..."}
-	local start, progress = tick(), 0
+
+	tween(panel, TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}).Completed:Wait()
+
+	local messages = {"Preparing...", "Loading modules...", "Almost ready...", "Finishing..."}
+	local start = tick()
+	local progress = 0
+	local display = 0
+	local barTw = nil
+
+	local function setBar(p)
+		p = math.clamp(p, 0, 1)
+		if barTw then pcall(function() barTw:Cancel() end) end
+		barTw = tween(bar, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = UDim2.new(p, 0, 1, 0),
+		})
+		pct.Text = math.floor(p * 100 + 0.5) .. "%"
+		status.Text = messages[math.clamp(math.floor(p * #messages) + 1, 1, #messages)]
+		skip.Visible = p >= 0.4
+	end
+
 	skip.MouseButton1Click:Connect(function()
 		if progress >= 0.4 then skipped, done = true, true end
 	end)
+
 	while not done do
-		progress = math.clamp((tick() - start) / duration, 0, 1)
-		if skipped then progress = 1 end
-		bar.Size = UDim2.new(progress, 0, 1, 0)
-		pct.Text = math.floor(progress * 100) .. "%"
-		status.Text = messages[math.clamp(math.floor(progress * #messages) + 1, 1, #messages)]
-		skip.Visible = progress >= 0.4
-		if progress >= 1 then done = true end
-		task.wait(0.05)
+		local target = math.clamp((tick() - start) / duration, 0, 1)
+		if skipped then target = 1 end
+		progress = target
+		display = display + (target - display) * 0.22
+		if math.abs(target - display) < 0.002 then display = target end
+		setBar(display)
+		if progress >= 1 and display >= 0.995 then done = true end
+		task.wait()
 	end
-	tween(panel, TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(-1, 0, 0, 0)}).Completed:Wait()
+	setBar(1)
+	task.wait(0.12)
+	tween(panel, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(-1, 0, 0, 0)}).Completed:Wait()
 	gui:Destroy()
 end
 
