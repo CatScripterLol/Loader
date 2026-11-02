@@ -1,1 +1,7 @@
--- placeholder will be replaced
+local BASE = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/"
+local a = game:HttpGet(BASE .. "MainA")
+local b = game:HttpGet(BASE .. "MainB")
+local LS = loadstring or load
+local fn, err = LS(a .. b)
+if not fn then error("[ElevatorHub] Main compile: " .. tostring(err)) end
+fn()
