@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.3.6"
+local LOCAL_VERSION = "1.3.7"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 
 local ALLOWED_PLACE = 4104106043
@@ -68,6 +68,17 @@ Hub.playerHighlights = {}
 Hub._farmTween = nil
 Hub._lightingBackup = nil
 Hub._skyBackup = nil
+Hub._cleanConn = nil
+Hub._radioConn = nil
+
+local COL_OFF = Color3.fromRGB(55, 55, 70)
+local COL_ON = Color3.fromRGB(40, 150, 75)
+local COL_TP = {
+	Color3.fromRGB(70, 130, 220),
+	Color3.fromRGB(50, 180, 140),
+	Color3.fromRGB(200, 140, 50),
+	Color3.fromRGB(160, 80, 200),
+}
 
 local function perfInterval()
 	local fps = 60
@@ -110,8 +121,39 @@ function Hub.teleport(pos)
 		local char = player.Character or player.CharacterAdded:Wait()
 		local hrp = char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart", 5)
 		if not hrp then return end
-		if char.PrimaryPart then char:PivotTo(CFrame.new(pos)) else hrp.CFrame = CFrame.new(pos) end
+		if typeof(pos) == "Vector3" then
+			if char.PrimaryPart then char:PivotTo(CFrame.new(pos)) else hrp.CFrame = CFrame.new(pos) end
+		elseif typeof(pos) == "CFrame" then
+			if char.PrimaryPart then char:PivotTo(pos) else hrp.CFrame = pos end
+		end
 	end)
+end
+
+function Hub.teleportShop()
+	local pos = nil
+	pcall(function()
+		local names = {"Shop", "shop", "PointsShop", "RobuxShop", "Store", "LobbyShop"}
+		for _, n in pairs(names) do
+			local o = workspace:FindFirstChild(n, true)
+			if o then
+				if o:IsA("BasePart") then pos = o.Position break end
+				if o:IsA("Model") then
+					local p = o.PrimaryPart or o:FindFirstChildWhichIsA("BasePart")
+					if p then pos = p.Position break end
+				end
+			end
+		end
+		if not pos then
+			for _, v in pairs(workspace:GetDescendants()) do
+				if v:IsA("BasePart") and string.lower(v.Name) == "shop" then
+					pos = v.Position
+					break
+				end
+			end
+		end
+	end)
+	if not pos then pos = Vector3.new(0, 5.5, 28) end
+	Hub.teleport(pos)
 end
 
 function Hub.isKiller(model)
@@ -126,8 +168,100 @@ function Hub.isKiller(model)
 	return false
 end
 
+local function isRadioSound(v)
+	if not v or not v:IsA("Sound") then return false end
+	local n = string.lower(v.Name)
+	if string.find(n, "radio") or string.find(n, "music") or string.find(n, "broadcast")
+		or string.find(n, "speaker") or string.find(n, "song") or string.find(n, "bgm")
+		or string.find(n, "lobby") or string.find(n, "theme") then
+		return true
+	end
+	return false
+end
+
+function Hub.muteRadioSound(v)
+	if not isRadioSound(v) then return end
+	pcall(function()
+		v.Volume = 0
+		v.Playing = false
+		v:Stop()
+	end)
+end
+
+function Hub.handleAntiRadio()
+	pcall(function()
+		for _, parent in pairs({workspace, SoundService}) do
+			for _, v in pairs(parent:GetDescendants()) do
+				Hub.muteRadioSound(v)
+			end
+		end
+	end)
+end
+
+function Hub.setAntiRadio(on)
+	Hub.antiRadio = on and true or false
+	if Hub._radioConn then
+		pcall(function() Hub._radioConn:Disconnect() end)
+		Hub._radioConn = nil
+	end
+	if on then
+		Hub.handleAntiRadio()
+		Hub._radioConn = workspace.DescendantAdded:Connect(function(obj)
+			if Hub.antiRadio and obj:IsA("Sound") then
+				task.defer(function() Hub.muteRadioSound(obj) end)
+			end
+		end)
+		pcall(function()
+			SoundService.DescendantAdded:Connect(function(obj)
+				if Hub.antiRadio and obj:IsA("Sound") then
+					task.defer(function() Hub.muteRadioSound(obj) end)
+				end
+			end)
+		end)
+	end
+end
+
+local function enforceCleanVision()
+	if not Hub.cleanVision then return end
+	pcall(function()
+		Lighting.FogEnd = 9e9
+		Lighting.FogStart = 0
+		Lighting.FogColor = Color3.fromRGB(255, 255, 255)
+		Lighting.Brightness = math.max(Lighting.Brightness, 2)
+		for _, v in pairs(Lighting:GetChildren()) do
+			if v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect")
+				or v:IsA("DepthOfFieldEffect") or v:IsA("SunRaysEffect") or v:IsA("Atmosphere") then
+				pcall(function() v.Enabled = false end)
+			end
+		end
+		local hasDefault = Lighting:FindFirstChild("ElevatorDefaultSky")
+		if not hasDefault then
+			for _, v in pairs(Lighting:GetChildren()) do
+				if v:IsA("Sky") and v.Name ~= "ElevatorDefaultSky" then
+					if not Hub._skyBackup then Hub._skyBackup = {} end
+					table.insert(Hub._skyBackup, v:Clone())
+					v:Destroy()
+				end
+			end
+			local sky = Instance.new("Sky")
+			sky.Name = "ElevatorDefaultSky"
+			sky.SkyboxBk = "rbxasset://textures/sky/sky512_bk.tex"
+			sky.SkyboxDn = "rbxasset://textures/sky/sky512_dn.tex"
+			sky.SkyboxFt = "rbxasset://textures/sky/sky512_ft.tex"
+			sky.SkyboxLf = "rbxasset://textures/sky/sky512_lf.tex"
+			sky.SkyboxRt = "rbxasset://textures/sky/sky512_rt.tex"
+			sky.SkyboxUp = "rbxasset://textures/sky/sky512_up.tex"
+			sky.Parent = Lighting
+		end
+	end)
+end
+
 function Hub.setCleanVision(on)
 	Hub.cleanVision = on and true or false
+	if Hub._cleanConn then
+		pcall(function() Hub._cleanConn:Disconnect() end)
+		Hub._cleanConn = nil
+	end
 	pcall(function()
 		if on then
 			if not Hub._lightingBackup then
@@ -149,26 +283,21 @@ function Hub.setCleanVision(on)
 					end
 				end
 			end
-			Lighting.FogEnd, Lighting.FogStart = 9e9, 0
-			Lighting.FogColor = Color3.fromRGB(255, 255, 255)
-			Lighting.Brightness = 2.5
-			Lighting.Ambient = Color3.fromRGB(180, 180, 180)
-			Lighting.OutdoorAmbient = Color3.fromRGB(180, 180, 180)
-			for _, v in pairs(Lighting:GetChildren()) do
-				if v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect")
-					or v:IsA("DepthOfFieldEffect") or v:IsA("SunRaysEffect") or v:IsA("Atmosphere") then
-					pcall(function() v.Enabled = false end)
-				end
-			end
-			local sky = Instance.new("Sky")
-			sky.Name = "ElevatorDefaultSky"
-			sky.SkyboxBk = "rbxasset://textures/sky/sky512_bk.tex"
-			sky.SkyboxDn = "rbxasset://textures/sky/sky512_dn.tex"
-			sky.SkyboxFt = "rbxasset://textures/sky/sky512_ft.tex"
-			sky.SkyboxLf = "rbxasset://textures/sky/sky512_lf.tex"
-			sky.SkyboxRt = "rbxasset://textures/sky/sky512_rt.tex"
-			sky.SkyboxUp = "rbxasset://textures/sky/sky512_up.tex"
-			sky.Parent = Lighting
+			enforceCleanVision()
+			Hub._cleanConn = Lighting.ChildAdded:Connect(function(child)
+				if not Hub.cleanVision then return end
+				task.defer(function()
+					if child:IsA("BlurEffect") or child:IsA("ColorCorrectionEffect") or child:IsA("BloomEffect")
+						or child:IsA("DepthOfFieldEffect") or child:IsA("SunRaysEffect") or child:IsA("Atmosphere") then
+						pcall(function() child.Enabled = false end)
+					elseif child:IsA("Sky") and child.Name ~= "ElevatorDefaultSky" then
+						if not Hub._skyBackup then Hub._skyBackup = {} end
+						table.insert(Hub._skyBackup, child:Clone())
+						child:Destroy()
+						enforceCleanVision()
+					end
+				end)
+			end)
 		else
 			local b = Hub._lightingBackup
 			if b then
@@ -193,27 +322,6 @@ function Hub.setCleanVision(on)
 			Hub._lightingBackup = nil
 		end
 	end)
-end
-
-function Hub.handleAntiRadio()
-	pcall(function()
-		for _, parent in pairs({workspace, SoundService}) do
-			for _, v in pairs(parent:GetDescendants()) do
-				if v:IsA("Sound") then
-					local n = string.lower(v.Name)
-					if string.find(n, "radio") or string.find(n, "music") or string.find(n, "broadcast") or string.find(n, "speaker") then
-						v.Volume = 0
-						pcall(function() v:Stop() end)
-					end
-				end
-			end
-		end
-	end)
-end
-
-function Hub.setAntiRadio(on)
-	Hub.antiRadio = on and true or false
-	if on then Hub.handleAntiRadio() end
 end
 
 function Hub.scanFloor()
@@ -312,7 +420,8 @@ RunService.Heartbeat:Connect(function()
 	local now = tick()
 	if now - lastTick < perfInterval() then return end
 	lastTick = now
-	if Hub.cleanVision then pcall(function() Lighting.FogEnd, Lighting.FogStart = 9e9, 0 end) end
+
+if Hub.cleanVision then enforceCleanVision() end
 	if Hub.antiRadio then Hub.handleAntiRadio() end
 	local floor, pred = Hub.predictFloor()
 	if floorLabel then
@@ -426,7 +535,7 @@ local function makeBtn(parent, text, y, color)
 end
 local function toggleBtn(btn, on, onT, offT)
 	btn.Text = on and onT or offT
-	btn.BackgroundColor3 = on and Color3.fromRGB(45, 170, 70) or Color3.fromRGB(170, 45, 45)
+	btn.BackgroundColor3 = on and COL_ON or COL_OFF
 end
 
 local tp = makePage("TP")
@@ -440,14 +549,20 @@ makeTab("Farm", 3, farm)
 tp.Visible = true
 
 local places = {
-	{"Shop", Vector3.new(0, 4, 20), Color3.fromRGB(70, 130, 220)},
-	{"Elevator", Vector3.new(0, 4, -8), Color3.fromRGB(50, 180, 140)},
-	{"Above Elevator", Vector3.new(0, 20, -8), Color3.fromRGB(200, 140, 50)},
-	{"AFK Place", Vector3.new(2, 1814, -3), Color3.fromRGB(160, 80, 200)},
+	{"Shop", nil, COL_TP[1]},
+	{"Elevator", Vector3.new(1.7, 5.5, -8.4), COL_TP[2]},
+	{"Above Elevator", Vector3.new(0, 20, -8), COL_TP[3]},
+	{"AFK Place", Vector3.new(2, 1814, -3), COL_TP[4]},
 }
 for i, info in ipairs(places) do
 	local b = makeBtn(tp, info[1], 0.04 + (i - 1) * 0.17, info[3])
-	b.MouseButton1Click:Connect(function() Hub.teleport(info[2]) end)
+	b.MouseButton1Click:Connect(function()
+		if info[1] == "Shop" then
+			Hub.teleportShop()
+		else
+			Hub.teleport(info[2])
+		end
+	end)
 end
 
 floorLabel = Instance.new("TextLabel")
@@ -456,26 +571,26 @@ floorLabel.BackgroundTransparency, floorLabel.Text = 1, "Floor: ..."
 floorLabel.TextColor3, floorLabel.Font, floorLabel.TextSize = Color3.fromRGB(160, 165, 190), Enum.Font.Gotham, 11
 floorLabel.TextXAlignment, floorLabel.Parent = Enum.TextXAlignment.Left, tp
 
-local e1 = makeBtn(esp, "ESP Killers: OFF", 0.05, Color3.fromRGB(170, 45, 45))
+local e1 = makeBtn(esp, "ESP Killers: OFF", 0.05, COL_OFF)
 e1.MouseButton1Click:Connect(function() Hub.killerESP = not Hub.killerESP toggleBtn(e1, Hub.killerESP, "ESP Killers: ON", "ESP Killers: OFF") end)
-local e2 = makeBtn(esp, "ESP Elevator: OFF", 0.20, Color3.fromRGB(170, 45, 45))
+local e2 = makeBtn(esp, "ESP Elevator: OFF", 0.20, COL_OFF)
 e2.MouseButton1Click:Connect(function() Hub.elevESP = not Hub.elevESP toggleBtn(e2, Hub.elevESP, "ESP Elevator: ON", "ESP Elevator: OFF") end)
-local e3 = makeBtn(esp, "ESP Map: OFF", 0.35, Color3.fromRGB(170, 45, 45))
+local e3 = makeBtn(esp, "ESP Map: OFF", 0.35, COL_OFF)
 e3.MouseButton1Click:Connect(function() Hub.mapESP = not Hub.mapESP toggleBtn(e3, Hub.mapESP, "ESP Map: ON", "ESP Map: OFF") end)
-local e4 = makeBtn(esp, "ESP Players: OFF", 0.50, Color3.fromRGB(170, 45, 45))
+local e4 = makeBtn(esp, "ESP Players: OFF", 0.50, COL_OFF)
 e4.MouseButton1Click:Connect(function()
 	Hub.playerESP = not Hub.playerESP
 	if not Hub.playerESP then Hub.clearHighlights(Hub.playerHighlights) end
 	toggleBtn(e4, Hub.playerESP, "ESP Players: ON", "ESP Players: OFF")
 end)
 
-local m1 = makeBtn(misc, "Clean Vision: OFF", 0.05, Color3.fromRGB(170, 45, 45))
+local m1 = makeBtn(misc, "Clean Vision: OFF", 0.05, COL_OFF)
 m1.MouseButton1Click:Connect(function() Hub.setCleanVision(not Hub.cleanVision) toggleBtn(m1, Hub.cleanVision, "Clean Vision: ON", "Clean Vision: OFF") end)
-local m2 = makeBtn(misc, "Anti Radio: OFF", 0.18, Color3.fromRGB(170, 45, 45))
+local m2 = makeBtn(misc, "Anti Radio: OFF", 0.18, COL_OFF)
 m2.MouseButton1Click:Connect(function() Hub.setAntiRadio(not Hub.antiRadio) toggleBtn(m2, Hub.antiRadio, "Anti Radio: ON", "Anti Radio: OFF") end)
-local m3 = makeBtn(misc, "God Mode Detector: OFF", 0.31, Color3.fromRGB(170, 45, 45))
+local m3 = makeBtn(misc, "God Mode Detector: OFF", 0.31, COL_OFF)
 m3.MouseButton1Click:Connect(function() Hub.godCheckerOn = not Hub.godCheckerOn toggleBtn(m3, Hub.godCheckerOn, "God Mode Detector: ON", "God Mode Detector: OFF") end)
-local m4 = makeBtn(misc, "Floor Predictor: ON", 0.44, Color3.fromRGB(45, 170, 70))
+local m4 = makeBtn(misc, "Floor Predictor: ON", 0.44, COL_ON)
 m4.MouseButton1Click:Connect(function() Hub.predVisible = not Hub.predVisible toggleBtn(m4, Hub.predVisible, "Floor Predictor: ON", "Floor Predictor: OFF") end)
 
 godLabel = Instance.new("TextLabel")
@@ -567,9 +682,9 @@ local function setAntiAfk(on)
 	end
 end
 
-local a1 = makeBtn(farm, "Anti AFK: OFF", 0.05, Color3.fromRGB(170, 45, 45))
+local a1 = makeBtn(farm, "Anti AFK: OFF", 0.05, COL_OFF)
 a1.MouseButton1Click:Connect(function() setAntiAfk(not Hub.antiAfk) toggleBtn(a1, Hub.antiAfk, "Anti AFK: ON", "Anti AFK: OFF") end)
-local a2 = makeBtn(farm, "Auto Farm Wins: OFF", 0.20, Color3.fromRGB(170, 45, 45))
+local a2 = makeBtn(farm, "Auto Farm Wins: OFF", 0.20, COL_OFF)
 a2.MouseButton1Click:Connect(function()
 	if Hub.autoFarm then stopAutoFarm() else Hub.autoFarm = true startAutoFarm() end
 	toggleBtn(a2, Hub.autoFarm, "Auto Farm Wins: ON", "Auto Farm Wins: OFF")
