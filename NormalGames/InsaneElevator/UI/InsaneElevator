@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.3.7"
+local LOCAL_VERSION = "1.3.8"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 
 local ALLOWED_PLACE = 4104106043
@@ -70,6 +70,7 @@ Hub._lightingBackup = nil
 Hub._skyBackup = nil
 Hub._cleanConn = nil
 Hub._radioConn = nil
+Hub._mutedSounds = {}
 
 local COL_OFF = Color3.fromRGB(55, 55, 70)
 local COL_ON = Color3.fromRGB(40, 150, 75)
@@ -130,30 +131,7 @@ function Hub.teleport(pos)
 end
 
 function Hub.teleportShop()
-	local pos = nil
-	pcall(function()
-		local names = {"Shop", "shop", "PointsShop", "RobuxShop", "Store", "LobbyShop"}
-		for _, n in pairs(names) do
-			local o = workspace:FindFirstChild(n, true)
-			if o then
-				if o:IsA("BasePart") then pos = o.Position break end
-				if o:IsA("Model") then
-					local p = o.PrimaryPart or o:FindFirstChildWhichIsA("BasePart")
-					if p then pos = p.Position break end
-				end
-			end
-		end
-		if not pos then
-			for _, v in pairs(workspace:GetDescendants()) do
-				if v:IsA("BasePart") and string.lower(v.Name) == "shop" then
-					pos = v.Position
-					break
-				end
-			end
-		end
-	end)
-	if not pos then pos = Vector3.new(0, 5.5, 28) end
-	Hub.teleport(pos)
+	Hub.teleport(Vector3.new(-1980, -397, 913))
 end
 
 function Hub.isKiller(model)
@@ -182,9 +160,25 @@ end
 function Hub.muteRadioSound(v)
 	if not isRadioSound(v) then return end
 	pcall(function()
+		if not Hub._mutedSounds[v] then
+			Hub._mutedSounds[v] = {Volume = v.Volume, Playing = v.Playing}
+		end
 		v.Volume = 0
-		v.Playing = false
 		v:Stop()
+	end)
+end
+
+function Hub.restoreRadioSounds()
+	pcall(function()
+		for snd, data in pairs(Hub._mutedSounds) do
+			if snd and snd.Parent then
+				pcall(function()
+					snd.Volume = data.Volume or 1
+					if data.Playing then snd:Play() end
+				end)
+			end
+		end
+		table.clear(Hub._mutedSounds)
 	end)
 end
 
@@ -211,13 +205,8 @@ function Hub.setAntiRadio(on)
 				task.defer(function() Hub.muteRadioSound(obj) end)
 			end
 		end)
-		pcall(function()
-			SoundService.DescendantAdded:Connect(function(obj)
-				if Hub.antiRadio and obj:IsA("Sound") then
-					task.defer(function() Hub.muteRadioSound(obj) end)
-				end
-			end)
-		end)
+	else
+		Hub.restoreRadioSounds()
 	end
 end
 
@@ -327,17 +316,51 @@ end
 function Hub.scanFloor()
 	local name = "Unknown"
 	pcall(function()
-		local cf = workspace:FindFirstChild("CurrentFloor")
-		if cf then
-			name = cf.Name
-			if cf:IsA("StringValue") or cf:IsA("NumberValue") then name = tostring(cf.Value) end
-			local sv = cf:FindFirstChildWhichIsA("StringValue")
-			if sv then name = tostring(sv.Value) end
+		local function readVal(o)
+			if not o then return nil end
+			if o:IsA("StringValue") or o:IsA("NumberValue") or o:IsA("IntValue") then return tostring(o.Value) end
+			if o:IsA("TextLabel") or o:IsA("TextButton") then
+				local t = tostring(o.Text or "")
+				if t ~= "" and t ~= "Floor" then return t end
+			end
+			local sv = o:FindFirstChildWhichIsA("StringValue") or o:FindFirstChildWhichIsA("NumberValue")
+			if sv then return tostring(sv.Value) end
+			local tl = o:FindFirstChildWhichIsA("TextLabel", true)
+			if tl and tl.Text and tl.Text ~= "" then return tostring(tl.Text) end
+			return o.Name
 		end
-		for _, v in pairs(workspace:GetChildren()) do
-			local ln = string.lower(v.Name)
-			if string.find(ln, "floor") and not string.find(ln, "elevator") then
-				if v:IsA("Folder") or v:IsA("Model") then name = v.Name break end
+		local tryNames = {"CurrentFloor", "Floor", "FloorName", "CurrentFloorName", "ActiveFloor"}
+		for _, n in pairs(tryNames) do
+			local o = workspace:FindFirstChild(n, true) or RS:FindFirstChild(n, true)
+			if o then
+				local v = readVal(o)
+				if v and v ~= "" and string.lower(v) ~= "currentfloor" and string.lower(v) ~= "floor" then
+					name = v
+					break
+				end
+			end
+		end
+		if name == "Unknown" then
+			for _, v in pairs(player.PlayerGui:GetDescendants()) do
+				if v:IsA("TextLabel") or v:IsA("TextButton") then
+					local t = tostring(v.Text or "")
+					local ln = string.lower(t)
+					if string.find(ln, "floor") and #t < 80 then
+						name = t
+						break
+					end
+				end
+			end
+		end
+		if name == "Unknown" then
+			for _, v in pairs(workspace:GetChildren()) do
+				local ln = string.lower(v.Name)
+				if (string.find(ln, "floor") or string.find(ln, "stage")) and not string.find(ln, "elevator") then
+					if v:IsA("Folder") or v:IsA("Model") or v:IsA("StringValue") then
+						name = readVal(v) or v.Name
+						break
+					end
+				end
 			end
 		end
 	end)
@@ -420,8 +443,7 @@ RunService.Heartbeat:Connect(function()
 	local now = tick()
 	if now - lastTick < perfInterval() then return end
 	lastTick = now
-
-if Hub.cleanVision then enforceCleanVision() end
+	if Hub.cleanVision then enforceCleanVision() end
 	if Hub.antiRadio then Hub.handleAntiRadio() end
 	local floor, pred = Hub.predictFloor()
 	if floorLabel then
@@ -439,7 +461,18 @@ if Hub.cleanVision then enforceCleanVision() end
 	end
 	if Hub.godCheckerOn then
 		local users = Hub.getGodUsers()
-		if godLabel then godLabel.Text = (#users > 0) and ("God: " .. table.concat(users, ", ")) or "God: none" end
+		if godLabel then
+			if #users == 0 then godLabel.Text = "God: none"
+			else
+				local lines, line = {}, "God: "
+				for i, u in ipairs(users) do
+					local add = (i == 1 and u) or (", " .. u)
+					if #line + #add > 28 then table.insert(lines, line) line = u else line = line .. add end
+				end
+				table.insert(lines, line)
+				godLabel.Text = table.concat(lines, "\n")
+			end
+		end
 	elseif godLabel then
 		godLabel.Text = "God: off"
 	end
@@ -489,10 +522,10 @@ frame.BackgroundColor3, frame.BorderSizePixel, frame.Active, frame.Draggable = C
 frame.Parent = gui
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
 local title = Instance.new("TextLabel")
-title.Size, title.BackgroundColor3 = UDim2.new(1, -56, 0, 28), Color3.fromRGB(38, 38, 55)
+title.Size, title.BackgroundTransparency = UDim2.new(1, -56, 0, 28), 1
 title.Text, title.TextColor3, title.Font, title.TextSize = "Insane Elevator", Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold, 13
-title.Parent = frame
-Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
+title.TextXAlignment, title.Parent = Enum.TextXAlignment.Left, frame
+title.Position = UDim2.new(0, 10, 0, 0)
 local close = Instance.new("TextButton")
 close.Size, close.Position = UDim2.new(0, 28, 0, 28), UDim2.new(1, -28, 0, 0)
 close.BackgroundColor3, close.Text, close.TextColor3 = Color3.fromRGB(190, 45, 45), "X", Color3.fromRGB(255, 255, 255)
@@ -557,11 +590,7 @@ local places = {
 for i, info in ipairs(places) do
 	local b = makeBtn(tp, info[1], 0.04 + (i - 1) * 0.17, info[3])
 	b.MouseButton1Click:Connect(function()
-		if info[1] == "Shop" then
-			Hub.teleportShop()
-		else
-			Hub.teleport(info[2])
-		end
+		if info[1] == "Shop" then Hub.teleportShop() else Hub.teleport(info[2]) end
 	end)
 end
 
@@ -594,13 +623,14 @@ local m4 = makeBtn(misc, "Floor Predictor: ON", 0.44, COL_ON)
 m4.MouseButton1Click:Connect(function() Hub.predVisible = not Hub.predVisible toggleBtn(m4, Hub.predVisible, "Floor Predictor: ON", "Floor Predictor: OFF") end)
 
 godLabel = Instance.new("TextLabel")
-godLabel.Size, godLabel.Position = UDim2.new(0.9, 0, 0, 24), UDim2.new(0.05, 0, 0.60, 0)
+godLabel.Size, godLabel.Position = UDim2.new(0.9, 0, 0, 48), UDim2.new(0.05, 0, 0.58, 0)
 godLabel.BackgroundTransparency, godLabel.Text = 1, "God: off"
 godLabel.TextColor3, godLabel.Font, godLabel.TextSize = Color3.fromRGB(200, 180, 120), Enum.Font.Gotham, 11
-godLabel.TextXAlignment, godLabel.Parent = Enum.TextXAlignment.Left, misc
+godLabel.TextXAlignment, godLabel.TextYAlignment = Enum.TextXAlignment.Left, Enum.TextYAlignment.Top
+godLabel.TextWrapped, godLabel.Parent = true, misc
 
 predLabel = Instance.new("TextLabel")
-predLabel.Size, predLabel.Position = UDim2.new(0.9, 0, 0, 40), UDim2.new(0.05, 0, 0.72, 0)
+predLabel.Size, predLabel.Position = UDim2.new(0.9, 0, 0, 40), UDim2.new(0.05, 0, 0.78, 0)
 predLabel.BackgroundTransparency, predLabel.Text = 1, "Current: ...\nNext: ..."
 predLabel.TextColor3, predLabel.Font, predLabel.TextSize = Color3.fromRGB(120, 200, 255), Enum.Font.Gotham, 11
 predLabel.TextXAlignment, predLabel.TextYAlignment = Enum.TextXAlignment.Left, Enum.TextYAlignment.Top
