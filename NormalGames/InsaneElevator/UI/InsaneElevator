@@ -1,20 +1,35 @@
-local env = (typeof(getgenv) == "function" and getgenv()) or _G
-local Hub = env.ElevatorHub
-if not Hub then return end
-
+local ALLOWED_PLACE = 4104106043
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 local VirtualUser = game:GetService("VirtualUser")
-local player = Hub.player or Players.LocalPlayer
-local pg = Hub.pg or player:WaitForChild("PlayerGui")
 
-local function safeClear(tbl)
-	if type(tbl) ~= "table" then return end
-	for _, h in pairs(tbl) do pcall(function() if h then h:Destroy() end end) end
-	table.clear(tbl)
+local player = Players.LocalPlayer
+if not player then return end
+if game.PlaceId ~= ALLOWED_PLACE then
+	warn("[ElevatorHub] Wrong place id")
+	return
 end
-Hub.clearHighlights = safeClear
+
+local pg = player:WaitForChild("PlayerGui")
+local env = (typeof(getgenv) == "function" and getgenv()) or _G
+env.ElevatorHub = env.ElevatorHub or {}
+local Hub = env.ElevatorHub
+
+Hub.player = player
+Hub.pg = pg
+Hub.killerESP = Hub.killerESP or false
+Hub.elevESP = Hub.elevESP or false
+Hub.mapESP = Hub.mapESP or false
+Hub.cleanVision = Hub.cleanVision or false
+Hub.antiRadio = Hub.antiRadio or false
+Hub.predVisible = Hub.predVisible ~= false
+Hub.godCheckerOn = Hub.godCheckerOn or false
+Hub.lastFloorName = Hub.lastFloorName or "Unknown"
+Hub.killerHighlights = Hub.killerHighlights or {}
+Hub.elevHighlights = Hub.elevHighlights or {}
+Hub.mapHighlights = Hub.mapHighlights or {}
 Hub.playerESP = Hub.playerESP or false
 Hub.playerHighlights = Hub.playerHighlights or {}
 Hub.antiAfk = Hub.antiAfk or false
@@ -22,8 +37,30 @@ Hub.autoFarm = Hub.autoFarm or false
 Hub.farmSpeed = Hub.farmSpeed or 25
 Hub._farmTween = nil
 
-local oldTeleport = Hub.teleport
-Hub.teleport = function(pos)
+function Hub.clearHighlights(tbl)
+	if type(tbl) ~= "table" then return end
+	for _, h in pairs(tbl) do
+		pcall(function() if h and h.Destroy then h:Destroy() end end)
+	end
+	table.clear(tbl)
+end
+
+function Hub.applyHighlight(obj, color, tbl)
+	if not obj or not obj.Parent then return end
+	if obj:FindFirstChild("ESPHighlight") then return end
+	local h = Instance.new("Highlight")
+	h.Name = "ESPHighlight"
+	h.Adornee = obj
+	h.FillColor = color
+	h.OutlineColor = color
+	h.FillTransparency = 0.55
+	h.OutlineTransparency = 0
+	h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	h.Parent = obj
+	table.insert(tbl, h)
+end
+
+function Hub.teleport(pos)
 	pcall(function()
 		local char = player.Character or player.CharacterAdded:Wait()
 		local hrp = char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart", 3)
@@ -31,11 +68,129 @@ Hub.teleport = function(pos)
 	end)
 end
 
+function Hub.isKiller(model)
+	if not model or not model:IsA("Model") then return false end
+	local n = string.lower(model.Name)
+	if Players:FindFirstChild(model.Name) then return false end
+	if string.find(n, "killer") or string.find(n, "enemy") or string.find(n, "npc") then return true end
+	if model:FindFirstChildOfClass("Humanoid") and not Players:GetPlayerFromCharacter(model) then
+		if string.find(n, "boss") or string.find(n, "monster") or string.find(n, "entity") then return true end
+	end
+	return false
+end
+
+function Hub.setCleanVision(on)
+	Hub.cleanVision = on
+	pcall(function()
+		if on then
+			Lighting.FogEnd = 1e6
+			Lighting.FogStart = 0
+			Lighting.Brightness = 2
+		else
+			Lighting.FogEnd = 100000
+		end
+	end)
+end
+
+function Hub.setAntiRadio(on)
+	Hub.antiRadio = on
+end
+
+function Hub.scanFloor()
+	local name = "Unknown"
+	pcall(function()
+		local cf = workspace:FindFirstChild("CurrentFloor")
+		if cf then
+			name = cf.Name
+			if cf:IsA("StringValue") or cf:IsA("NumberValue") then name = tostring(cf.Value) end
+		end
+		for _, v in pairs(workspace:GetChildren()) do
+			local ln = string.lower(v.Name)
+			if string.find(ln, "floor") and not string.find(ln, "elevator") then
+				if v:IsA("Folder") or v:IsA("Model") then name = v.Name break end
+			end
+		end
+	end)
+	Hub.lastFloorName = name
+	return name
+end
+
+function Hub.getGodUsers()
+	local list = {}
+	pcall(function()
+		for _, plr in pairs(Players:GetPlayers()) do
+			local found = false
+			local function scan(parent)
+				if not parent then return end
+				for _, t in pairs(parent:GetChildren()) do
+					local n = string.lower(t.Name)
+					if string.find(n, "god") or string.find(n, "admin") or string.find(n, "immortal") then found = true end
+				end
+			end
+			scan(plr:FindFirstChild("Backpack"))
+			scan(plr.Character)
+			if found then table.insert(list, plr.Name) end
+		end
+	end)
+	return list
+end
+
+Hub.onFloorUpdate = Hub.onFloorUpdate or nil
+Hub.onGodUpdate = Hub.onGodUpdate or nil
+
+local lastTick = 0
+RunService.Heartbeat:Connect(function()
+	local now = tick()
+	if now - lastTick < 0.5 then return end
+	lastTick = now
+	if Hub.cleanVision then pcall(function() Lighting.FogEnd, Lighting.FogStart = 1e6, 0 end) end
+	if Hub.antiRadio then
+		pcall(function()
+			for _, v in pairs(workspace:GetDescendants()) do
+				if v:IsA("Sound") then
+					local n = string.lower(v.Name)
+					if string.find(n, "radio") or string.find(n, "music") then v.Volume = 0 v:Stop() end
+				end
+			end
+		end)
+	end
+	local floor = Hub.scanFloor()
+	if Hub.onFloorUpdate then pcall(Hub.onFloorUpdate, floor) end
+	if Hub.godCheckerOn and Hub.onGodUpdate then pcall(Hub.onGodUpdate, Hub.getGodUsers()) end
+	if Hub.killerESP then
+		Hub.clearHighlights(Hub.killerHighlights)
+		for _, v in pairs(workspace:GetDescendants()) do
+			if v:IsA("Model") and Hub.isKiller(v) then Hub.applyHighlight(v, Color3.fromRGB(255, 40, 40), Hub.killerHighlights) end
+		end
+	else Hub.clearHighlights(Hub.killerHighlights) end
+	if Hub.elevESP then
+		Hub.clearHighlights(Hub.elevHighlights)
+		for _, v in pairs(workspace:GetDescendants()) do
+			local n = string.lower(v.Name)
+			if (v:IsA("Model") or v:IsA("BasePart")) and (string.find(n, "elevator") or n == "lift") then
+				Hub.applyHighlight(v, Color3.fromRGB(0, 200, 255), Hub.elevHighlights)
+			end
+		end
+	else Hub.clearHighlights(Hub.elevHighlights) end
+	if Hub.mapESP then
+		Hub.clearHighlights(Hub.mapHighlights)
+		local cf = workspace:FindFirstChild("CurrentFloor")
+		if cf then Hub.applyHighlight(cf, Color3.fromRGB(255, 200, 50), Hub.mapHighlights) end
+	else Hub.clearHighlights(Hub.mapHighlights) end
+	if Hub.playerESP then
+		for _, plr in pairs(Players:GetPlayers()) do
+			if plr ~= player and plr.Character then
+				Hub.applyHighlight(plr.Character, Color3.fromRGB(60, 180, 255), Hub.playerHighlights)
+			end
+		end
+	else Hub.clearHighlights(Hub.playerHighlights) end
+end)
+
 player.CharacterRemoving:Connect(function()
-	safeClear(Hub.killerHighlights)
-	safeClear(Hub.elevHighlights)
-	safeClear(Hub.mapHighlights)
-	safeClear(Hub.playerHighlights)
+	Hub.clearHighlights(Hub.killerHighlights)
+	Hub.clearHighlights(Hub.elevHighlights)
+	Hub.clearHighlights(Hub.mapHighlights)
+	Hub.clearHighlights(Hub.playerHighlights)
 	if Hub._farmTween then pcall(function() Hub._farmTween:Cancel() end) Hub._farmTween = nil end
 end)
 
@@ -128,20 +283,14 @@ e3.MouseButton1Click:Connect(function() Hub.mapESP = not Hub.mapESP toggleBtn(e3
 local e4 = makeBtn(esp, "ESP Players: OFF", 0.54, Color3.fromRGB(180, 50, 50))
 e4.MouseButton1Click:Connect(function()
 	Hub.playerESP = not Hub.playerESP
-	if not Hub.playerESP then safeClear(Hub.playerHighlights) end
+	if not Hub.playerESP then Hub.clearHighlights(Hub.playerHighlights) end
 	toggleBtn(e4, Hub.playerESP, "ESP Players: ON", "ESP Players: OFF")
 end)
 
 local m1 = makeBtn(misc, "Clean Vision: OFF", 0.06, Color3.fromRGB(180, 50, 50))
-m1.MouseButton1Click:Connect(function()
-	if Hub.setCleanVision then Hub.setCleanVision(not Hub.cleanVision) else Hub.cleanVision = not Hub.cleanVision end
-	toggleBtn(m1, Hub.cleanVision, "Clean Vision: ON", "Clean Vision: OFF")
-end)
+m1.MouseButton1Click:Connect(function() Hub.setCleanVision(not Hub.cleanVision) toggleBtn(m1, Hub.cleanVision, "Clean Vision: ON", "Clean Vision: OFF") end)
 local m2 = makeBtn(misc, "Anti Radio: OFF", 0.22, Color3.fromRGB(180, 50, 50))
-m2.MouseButton1Click:Connect(function()
-	if Hub.setAntiRadio then Hub.setAntiRadio(not Hub.antiRadio) else Hub.antiRadio = not Hub.antiRadio end
-	toggleBtn(m2, Hub.antiRadio, "Anti Radio: ON", "Anti Radio: OFF")
-end)
+m2.MouseButton1Click:Connect(function() Hub.setAntiRadio(not Hub.antiRadio) toggleBtn(m2, Hub.antiRadio, "Anti Radio: ON", "Anti Radio: OFF") end)
 local m3 = makeBtn(misc, "God Detector: OFF", 0.38, Color3.fromRGB(180, 50, 50))
 m3.MouseButton1Click:Connect(function() Hub.godCheckerOn = not Hub.godCheckerOn toggleBtn(m3, Hub.godCheckerOn, "God Detector: ON", "God Detector: OFF") end)
 
@@ -241,12 +390,3 @@ local info = Instance.new("TextLabel")
 info.Size, info.Position, info.BackgroundTransparency = UDim2.new(0.9, 0, 0, 36), UDim2.new(0.05, 0, 0.58, 0), 1
 info.Text, info.TextColor3, info.Font, info.TextSize = "Y 1820  platform follows\nX 1-100  Z 100-400", Color3.fromRGB(140, 145, 165), Enum.Font.Gotham, 11
 info.TextXAlignment, info.Parent = Enum.TextXAlignment.Left, farm
-
-RunService.Heartbeat:Connect(function()
-	if not Hub.playerESP then return end
-	for _, plr in pairs(Players:GetPlayers()) do
-		if plr ~= player and plr.Character then
-			Hub.applyHighlight(plr.Character, Color3.fromRGB(60, 180, 255), Hub.playerHighlights)
-		end
-	end
-end)
