@@ -1,7 +1,6 @@
-local LOCAL_VERSION = "1.1.2"
+local LOCAL_VERSION = "1.2.0"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 local BASE = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/"
-local CORE = "https://raw.githubusercontent.com/CatScripterLol/Loader/6dca68e8ff3f20936e95826a2b0e590be21459e9/NormalGames/InsaneElevator"
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -304,18 +303,8 @@ local function fetch(url)
 	return nil
 end
 
-pcall(function()
-	pg.ChildAdded:Connect(function(c)
-		if c.Name == "ElevatorLoading" then
-			task.defer(function()
-				pcall(function() c:Destroy() end)
-			end)
-		end
-	end)
-end)
-
 local urls = {
-	CORE,
+	BASE .. "Main",
 	BASE .. "UI/InsaneElevator",
 	BASE .. "UI/RespawnFix",
 	BASE .. "UI/PlayerESP",
@@ -335,9 +324,7 @@ while pending > 0 and tick() - t0 < 15 do
 end
 
 execSrc(sources[1])
-if not pg:FindFirstChild("ElevatorTP") then
-	execSrc(sources[2])
-end
+execSrc(sources[2])
 execSrc(sources[3])
 execSrc(sources[4])
 execSrc(sources[5])
