@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.4.0"
+local LOCAL_VERSION = "1.4.1"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 
 local ALLOWED_PLACE = 4104106043
@@ -102,11 +102,7 @@ end
 function Hub.applyHighlight(obj, color, tbl)
 	if not obj or not obj.Parent then return end
 	local existing = obj:FindFirstChild("ESPHighlight")
-	if existing then
-		existing.FillColor = color
-		existing.OutlineColor = color
-		return
-	end
+	if existing then existing.FillColor = color existing.OutlineColor = color return end
 	local h = Instance.new("Highlight")
 	h.Name = "ESPHighlight"
 	h.Adornee = obj
@@ -149,8 +145,7 @@ function Hub.isKiller(model)
 end
 
 local function isRadioName(n)
-	n = string.lower(tostring(n or ""))
-	return string.find(n, "radio") ~= nil
+	return string.find(string.lower(tostring(n or "")), "radio") ~= nil
 end
 
 function Hub.removeRadiosFromEveryone()
@@ -159,9 +154,7 @@ function Hub.removeRadiosFromEveryone()
 			local function wipe(parent)
 				if not parent then return end
 				for _, t in pairs(parent:GetChildren()) do
-					if t:IsA("Tool") or t:IsA("HopperBin") then
-						if isRadioName(t.Name) then pcall(function() t:Destroy() end) end
-					end
+					if (t:IsA("Tool") or t:IsA("HopperBin")) and isRadioName(t.Name) then pcall(function() t:Destroy() end) end
 				end
 			end
 			wipe(plr:FindFirstChild("Backpack"))
@@ -179,8 +172,7 @@ function Hub.removeRadiosFromEveryone()
 end
 
 function Hub.handleAntiRadio()
-	if not Hub.antiRadio then return end
-	Hub.removeRadiosFromEveryone()
+	if Hub.antiRadio then Hub.removeRadiosFromEveryone() end
 end
 
 function Hub.setAntiRadio(on)
@@ -235,8 +227,7 @@ local function enforceCleanVision()
 				pcall(function() v.Enabled = false end)
 			end
 		end
-		local hasDefault = Lighting:FindFirstChild("ElevatorDefaultSky")
-		if not hasDefault then
+		if not Lighting:FindFirstChild("ElevatorDefaultSky") then
 			for _, v in pairs(Lighting:GetChildren()) do
 				if v:IsA("Sky") and v.Name ~= "ElevatorDefaultSky" then
 					if not Hub._skyBackup then Hub._skyBackup = {} end
@@ -642,26 +633,38 @@ end
 local function clampSpeed(n)
 	return math.clamp(math.floor((tonumber(n) or 25) + 0.5), 25, 400)
 end
+local FARM_Y = 1820
+local FARM_CX, FARM_CZ = 2, -3
+local FARM_HALF = 300
+local FARM_MIN_DIST = 120
+local function randomFarmPos(fromPos)
+	local target
+	for _ = 1, 40 do
+		local x = FARM_CX + math.random(-FARM_HALF, FARM_HALF)
+		local z = FARM_CZ + math.random(-FARM_HALF, FARM_HALF)
+		target = Vector3.new(x, FARM_Y, z)
+		if not fromPos or (fromPos - target).Magnitude >= FARM_MIN_DIST then
+			return target
+		end
+	end
+	return target or Vector3.new(FARM_CX, FARM_Y, FARM_CZ)
+end
 local function farmOnce()
 	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if not hrp then task.wait(0.5) return end
+	if not hrp then return end
 	ensurePlatform()
-	local target = Vector3.new(math.random(1, 100), 1820, math.random(100, 400))
-	local speed = clampSpeed(Hub.farmSpeed)
-	Hub.farmSpeed = speed
-	local t = math.clamp((hrp.Position - target).Magnitude / speed, 0.5, 120)
 	stopFarmTween()
-	local tw = TweenService:Create(hrp, TweenInfo.new(t, Enum.EasingStyle.Linear), {CFrame = CFrame.new(target)})
-	Hub._farmTween = tw
-	local done = false
-	local c; c = tw.Completed:Connect(function() done = true if c then c:Disconnect() end end)
-	tw:Play()
-	local t0 = tick()
-	while not done and Hub.autoFarm and farmRunning do
-		if not hrp.Parent or tick() - t0 > t + 3 then break end
-		task.wait(0.15)
-	end
-	stopFarmTween()
+	local target = randomFarmPos(hrp.Position)
+	pcall(function()
+		local char = player.Character
+		if char and char.PrimaryPart then
+			char:PivotTo(CFrame.new(target))
+		else
+			hrp.CFrame = CFrame.new(target)
+		end
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+	end)
 end
 local function startAutoFarm()
 	if farmRunning then return end
@@ -670,8 +673,8 @@ local function startAutoFarm()
 	task.spawn(function()
 		while Hub.autoFarm and farmRunning do
 			pcall(farmOnce)
-			if not Hub.autoFarm then break end
-			task.wait(0.3)
+			if not Hub.autoFarm or not farmRunning then break end
+			task.wait()
 		end
 		farmRunning = false
 		stopFarmTween()
@@ -706,5 +709,5 @@ speedBox.FocusLost:Connect(function()
 end)
 local info = Instance.new("TextLabel")
 info.Size, info.Position, info.BackgroundTransparency = UDim2.new(0.9, 0, 0, 40), UDim2.new(0.05, 0, 0.58, 0), 1
-info.Text, info.TextColor3, info.Font, info.TextSize = "Y 1820  platform follows\nX 1-100  Z 100-400", Color3.fromRGB(140, 145, 165), Enum.Font.Gotham, 11
+info.Text, info.TextColor3, info.Font, info.TextSize = "Instant TP  600x600  min dist 120\nY 1820  center near AFK", Color3.fromRGB(140, 145, 165), Enum.Font.Gotham, 11
 info.TextXAlignment, info.Parent = Enum.TextXAlignment.Left, farm
