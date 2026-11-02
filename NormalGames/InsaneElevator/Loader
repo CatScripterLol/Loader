@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.3.0"
+local LOCAL_VERSION = "1.3.1"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 local BASE = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/"
 
@@ -139,15 +139,20 @@ if not runTerms() then
 	return
 end
 
-local ok, src = pcall(function()
-	return game:HttpGet(BASE .. "Script")
-end)
-if not ok or type(src) ~= "string" or src == "" then
-	warn("[ElevatorHub] failed to download Script")
-	return
+local function runUrl(url)
+	local ok, src = pcall(function() return game:HttpGet(url) end)
+	if not ok or type(src) ~= "string" or src == "" then
+		warn("[ElevatorHub] download failed: ", url)
+		return false
+	end
+	local LS = loadstring or load
+	if not LS then return false end
+	local fn, err = LS(src)
+	if not fn then warn("[ElevatorHub] compile: ", err) return false end
+	local ran, runErr = pcall(fn)
+	if not ran then warn("[ElevatorHub] runtime: ", runErr) return false end
+	return true
 end
-local LS = loadstring or load
-local fn, err = LS(src)
-if not fn then warn("[ElevatorHub] compile: ", err) return end
-local ran, runErr = pcall(fn)
-if not ran then warn("[ElevatorHub] runtime: ", runErr) end
+
+runUrl(BASE .. "Main")
+runUrl(BASE .. "UI/InsaneElevator")
