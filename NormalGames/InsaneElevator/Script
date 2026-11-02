@@ -1,0 +1,346 @@
+local ALLOWED = 4104106043
+if game.PlaceId ~= ALLOWED then warn("[ElevatorHub] wrong place") return end
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local TweenService = game:GetService("TweenService")
+local VirtualUser = game:GetService("VirtualUser")
+local player = Players.LocalPlayer
+local pg = player:WaitForChild("PlayerGui")
+local env = (typeof(getgenv) == "function" and getgenv()) or _G
+env.ElevatorHub = env.ElevatorHub or {}
+local Hub = env.ElevatorHub
+Hub.player, Hub.pg = player, pg
+Hub.killerESP, Hub.elevESP, Hub.mapESP = Hub.killerESP or false, Hub.elevESP or false, Hub.mapESP or false
+Hub.cleanVision, Hub.antiRadio = Hub.cleanVision or false, Hub.antiRadio or false
+Hub.predVisible = Hub.predVisible ~= false
+Hub.godCheckerOn = Hub.godCheckerOn or false
+Hub.playerESP, Hub.antiAfk, Hub.autoFarm = Hub.playerESP or false, Hub.antiAfk or false, Hub.autoFarm or false
+Hub.farmSpeed = Hub.farmSpeed or 25
+Hub.lastFloorName = Hub.lastFloorName or "Unknown"
+Hub.killerHighlights, Hub.elevHighlights, Hub.mapHighlights, Hub.playerHighlights = {}, {}, {}, {}
+Hub._farmTween = nil
+
+function Hub.clearHighlights(t)
+	if type(t) ~= "table" then return end
+	for _, h in pairs(t) do pcall(function() if h then h:Destroy() end end) end
+	table.clear(t)
+end
+function Hub.applyHighlight(obj, color, t)
+	if not obj or not obj.Parent or obj:FindFirstChild("ESPHighlight") then return end
+	local h = Instance.new("Highlight")
+	h.Name, h.Adornee, h.FillColor, h.OutlineColor = "ESPHighlight", obj, color, color
+	h.FillTransparency, h.OutlineTransparency = 0.55, 0
+	h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	h.Parent = obj
+	table.insert(t, h)
+end
+function Hub.teleport(pos)
+	pcall(function()
+		local c = player.Character or player.CharacterAdded:Wait()
+		local r = c:FindFirstChild("HumanoidRootPart") or c:WaitForChild("HumanoidRootPart", 3)
+		if r then r.CFrame = CFrame.new(pos) end
+	end)
+end
+function Hub.isKiller(m)
+	if not m or not m:IsA("Model") then return false end
+	if Players:FindFirstChild(m.Name) then return false end
+	local n = string.lower(m.Name)
+	if string.find(n, "killer") or string.find(n, "enemy") then return true end
+	if m:FindFirstChildOfClass("Humanoid") and not Players:GetPlayerFromCharacter(m) then
+		if string.find(n, "boss") or string.find(n, "monster") or string.find(n, "entity") then return true end
+	end
+	return false
+end
+function Hub.setCleanVision(on)
+	Hub.cleanVision = on
+	pcall(function()
+		if on then Lighting.FogEnd, Lighting.FogStart, Lighting.Brightness = 1e6, 0, 2
+		else Lighting.FogEnd = 100000 end
+	end)
+end
+function Hub.setAntiRadio(on)
+	Hub.antiRadio = on
+end
+function Hub.scanFloor()
+	local name = "Unknown"
+	pcall(function()
+		local cf = workspace:FindFirstChild("CurrentFloor")
+		if cf then name = (cf.Value and tostring(cf.Value)) or cf.Name end
+		for _, v in pairs(workspace:GetChildren()) do
+			local ln = string.lower(v.Name)
+			if string.find(ln, "floor") and not string.find(ln, "elevator") and (v:IsA("Folder") or v:IsA("Model")) then
+				name = v.Name break
+			end
+		end
+	end)
+	Hub.lastFloorName = name
+	return name
+end
+function Hub.getGodUsers()
+	local list = {}
+	for _, plr in pairs(Players:GetPlayers()) do
+		local found = false
+		local function scan(p)
+			if not p then return end
+			for _, t in pairs(p:GetChildren()) do
+				local n = string.lower(t.Name)
+				if string.find(n, "god") or string.find(n, "admin") then found = true end
+			end
+		end
+		scan(plr:FindFirstChild("Backpack"))
+		scan(plr.Character)
+		if found then table.insert(list, plr.Name) end
+	end
+	return list
+end
+
+local platform, platformConn, farmRunning, afkConn
+local function destroyPlatform()
+	if platformConn then pcall(function() platformConn:Disconnect() end) platformConn = nil end
+	if platform then pcall(function() platform:Destroy() end) platform = nil end
+end
+local function ensurePlatform()
+	if platform and platform.Parent then return end
+	destroyPlatform()
+	local p = Instance.new("Part")
+	p.Name, p.Size, p.Anchored, p.CanCollide = "ElevatorFarmPlatform", Vector3.new(14, 1, 14), true, true
+	p.Transparency, p.Color, p.Material, p.CastShadow = 0.35, Color3.fromRGB(70, 110, 255), Enum.Material.SmoothPlastic, false
+	p.Parent = workspace
+	platform = p
+	platformConn = RunService.Heartbeat:Connect(function()
+		if not Hub.autoFarm then destroyPlatform() return end
+		local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if hrp and platform then platform.CFrame = CFrame.new(hrp.Position.X, hrp.Position.Y - 3.2, hrp.Position.Z) end
+	end)
+end
+local function stopFarmTween()
+	if Hub._farmTween then pcall(function() Hub._farmTween:Cancel() end) Hub._farmTween = nil end
+end
+local function stopAutoFarm()
+	Hub.autoFarm, farmRunning = false, false
+	stopFarmTween()
+	destroyPlatform()
+end
+local function clampSpeed(n)
+	n = tonumber(n) or 25
+	return math.clamp(math.floor(n + 0.5), 25, 50)
+end
+local function farmOnce()
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then task.wait(0.5) return end
+	ensurePlatform()
+	local target = Vector3.new(math.random(1, 100), 1820, math.random(100, 400))
+	local speed = clampSpeed(Hub.farmSpeed)
+	Hub.farmSpeed = speed
+	local t = math.clamp((hrp.Position - target).Magnitude / speed, 1, 120)
+	stopFarmTween()
+	local tw = TweenService:Create(hrp, TweenInfo.new(t, Enum.EasingStyle.Linear), {CFrame = CFrame.new(target)})
+	Hub._farmTween = tw
+	local done = false
+	local c; c = tw.Completed:Connect(function() done = true if c then c:Disconnect() end end)
+	tw:Play()
+	local t0 = tick()
+	while not done and Hub.autoFarm and farmRunning do
+		if not hrp.Parent or tick() - t0 > t + 2 then break end
+		task.wait(0.1)
+	end
+	stopFarmTween()
+end
+local function startAutoFarm()
+	if farmRunning then return end
+	farmRunning = true
+	ensurePlatform()
+	task.spawn(function()
+		while Hub.autoFarm and farmRunning do
+			pcall(farmOnce)
+			if not Hub.autoFarm then break end
+			task.wait(0.25)
+		end
+		farmRunning = false
+		stopFarmTween()
+		destroyPlatform()
+	end)
+end
+local function setAntiAfk(on)
+	Hub.antiAfk = on
+	if afkConn then pcall(function() afkConn:Disconnect() end) afkConn = nil end
+	if on then
+		afkConn = player.Idled:Connect(function()
+			pcall(function() VirtualUser:CaptureController() VirtualUser:ClickButton2(Vector2.new()) end)
+		end)
+	end
+end
+
+player.CharacterRemoving:Connect(function()
+	Hub.clearHighlights(Hub.killerHighlights)
+	Hub.clearHighlights(Hub.elevHighlights)
+	Hub.clearHighlights(Hub.mapHighlights)
+	Hub.clearHighlights(Hub.playerHighlights)
+	stopFarmTween()
+	destroyPlatform()
+end)
+
+local lastTick = 0
+RunService.Heartbeat:Connect(function()
+	if tick() - lastTick < 0.45 then return end
+	lastTick = tick()
+	if Hub.cleanVision then pcall(function() Lighting.FogEnd, Lighting.FogStart = 1e6, 0 end) end
+	if Hub.antiRadio then
+		pcall(function()
+			for _, v in pairs(workspace:GetDescendants()) do
+				if v:IsA("Sound") then
+					local n = string.lower(v.Name)
+					if string.find(n, "radio") or string.find(n, "music") then v.Volume = 0 v:Stop() end
+				end
+			end
+		end)
+	end
+	local floor = Hub.scanFloor()
+	if Hub.onFloorUpdate then pcall(Hub.onFloorUpdate, floor) end
+	if Hub.godCheckerOn and Hub.onGodUpdate then pcall(Hub.onGodUpdate, Hub.getGodUsers()) end
+	if Hub.killerESP then
+		Hub.clearHighlights(Hub.killerHighlights)
+		for _, v in pairs(workspace:GetDescendants()) do
+			if v:IsA("Model") and Hub.isKiller(v) then Hub.applyHighlight(v, Color3.fromRGB(255, 40, 40), Hub.killerHighlights) end
+		end
+	else Hub.clearHighlights(Hub.killerHighlights) end
+	if Hub.elevESP then
+		Hub.clearHighlights(Hub.elevHighlights)
+		for _, v in pairs(workspace:GetDescendants()) do
+			local n = string.lower(v.Name)
+			if (v:IsA("Model") or v:IsA("BasePart")) and (string.find(n, "elevator") or n == "lift") then
+				Hub.applyHighlight(v, Color3.fromRGB(0, 200, 255), Hub.elevHighlights)
+			end
+		end
+	else Hub.clearHighlights(Hub.elevHighlights) end
+	if Hub.mapESP then
+		Hub.clearHighlights(Hub.mapHighlights)
+		local cf = workspace:FindFirstChild("CurrentFloor")
+		if cf then Hub.applyHighlight(cf, Color3.fromRGB(255, 200, 50), Hub.mapHighlights) end
+	else Hub.clearHighlights(Hub.mapHighlights) end
+	if Hub.playerESP then
+		for _, plr in pairs(Players:GetPlayers()) do
+			if plr ~= player and plr.Character then
+				Hub.applyHighlight(plr.Character, Color3.fromRGB(60, 180, 255), Hub.playerHighlights)
+			end
+		end
+	else Hub.clearHighlights(Hub.playerHighlights) end
+end)
+
+if pg:FindFirstChild("ElevatorTP") then pg.ElevatorTP:Destroy() end
+local gui = Instance.new("ScreenGui")
+gui.Name, gui.ResetOnSpawn = "ElevatorTP", false
+gui.Parent = pg
+local frame = Instance.new("Frame")
+frame.Size, frame.Position = UDim2.new(0, 220, 0, 320), UDim2.new(0.05, 0, 0.12, 0)
+frame.BackgroundColor3, frame.BorderSizePixel, frame.Active, frame.Draggable = Color3.fromRGB(25, 25, 35), 0, true, true
+frame.Parent = gui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+local title = Instance.new("TextLabel")
+title.Size, title.BackgroundColor3 = UDim2.new(1, -56, 0, 26), Color3.fromRGB(40, 40, 55)
+title.Text, title.TextColor3, title.Font, title.TextSize = "Insane Elevator", Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold, 13
+title.Parent = frame
+Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
+local close = Instance.new("TextButton")
+close.Size, close.Position = UDim2.new(0, 26, 0, 26), UDim2.new(1, -28, 0, 0)
+close.BackgroundColor3, close.Text, close.TextColor3 = Color3.fromRGB(180, 50, 50), "X", Color3.fromRGB(255, 255, 255)
+close.Font, close.TextSize, close.Parent = Enum.Font.GothamBold, 14, frame
+close.MouseButton1Click:Connect(function() gui.Enabled = false end)
+local tabBar = Instance.new("Frame")
+tabBar.Size, tabBar.Position = UDim2.new(1, 0, 0, 28), UDim2.new(0, 0, 0, 26)
+tabBar.BackgroundColor3, tabBar.BorderSizePixel, tabBar.Parent = Color3.fromRGB(30, 30, 42), 0, frame
+local content = Instance.new("Frame")
+content.Size, content.Position = UDim2.new(1, 0, 1, -54), UDim2.new(0, 0, 0, 54)
+content.BackgroundTransparency, content.Parent = 1, frame
+local pages = {}
+local function makePage(name)
+	local p = Instance.new("Frame")
+	p.Name, p.Size, p.BackgroundTransparency, p.Visible, p.Parent = name, UDim2.new(1, 0, 1, 0), 1, false, content
+	pages[name] = p
+	return p
+end
+local function makeTab(text, order, page)
+	local b = Instance.new("TextButton")
+	b.Size, b.Position = UDim2.new(0.25, -2, 1, 0), UDim2.new(order * 0.25, 1, 0, 0)
+	b.BackgroundColor3, b.Text, b.TextColor3 = Color3.fromRGB(35, 35, 48), text, Color3.fromRGB(255, 255, 255)
+	b.Font, b.TextSize, b.BorderSizePixel, b.Parent = Enum.Font.GothamBold, 11, 0, tabBar
+	b.MouseButton1Click:Connect(function()
+		for _, p in pairs(pages) do p.Visible = false end
+		page.Visible = true
+		for _, x in pairs(tabBar:GetChildren()) do
+			if x:IsA("TextButton") then x.BackgroundColor3 = (x == b) and Color3.fromRGB(60, 60, 90) or Color3.fromRGB(35, 35, 48) end
+		end
+	end)
+	return b
+end
+local function makeBtn(parent, text, y, color)
+	local b = Instance.new("TextButton")
+	b.Size, b.Position = UDim2.new(0.9, 0, 0, 26), UDim2.new(0.05, 0, y, 0)
+	b.BackgroundColor3, b.Text, b.TextColor3 = color, text, Color3.fromRGB(255, 255, 255)
+	b.Font, b.TextSize, b.Parent = Enum.Font.Gotham, 12, parent
+	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
+	return b
+end
+local function toggleBtn(btn, on, onT, offT)
+	btn.Text = on and onT or offT
+	btn.BackgroundColor3 = on and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
+end
+
+local tp = makePage("TP")
+local esp = makePage("ESP")
+local misc = makePage("Misc")
+local farm = makePage("Farm")
+makeTab("TP", 0, tp)
+makeTab("ESP", 1, esp)
+makeTab("Misc", 2, misc)
+makeTab("Farm", 3, farm)
+tp.Visible = true
+
+local places = {
+	{"Shop", Vector3.new(0, 4, 20)},
+	{"Elevator", Vector3.new(0, 4, -8)},
+	{"Above Elevator", Vector3.new(0, 20, -8)},
+	{"AFK Place", Vector3.new(2, 1814, -3)},
+}
+for i, info in ipairs(places) do
+	local b = makeBtn(tp, info[1], 0.05 + (i - 1) * 0.16, Color3.fromRGB(50, 90, 180))
+	b.MouseButton1Click:Connect(function() Hub.teleport(info[2]) end)
+end
+
+local e1 = makeBtn(esp, "ESP Killers: OFF", 0.06, Color3.fromRGB(180, 50, 50))
+e1.MouseButton1Click:Connect(function() Hub.killerESP = not Hub.killerESP toggleBtn(e1, Hub.killerESP, "ESP Killers: ON", "ESP Killers: OFF") end)
+local e2 = makeBtn(esp, "ESP Elevator: OFF", 0.22, Color3.fromRGB(180, 50, 50))
+e2.MouseButton1Click:Connect(function() Hub.elevESP = not Hub.elevESP toggleBtn(e2, Hub.elevESP, "ESP Elevator: ON", "ESP Elevator: OFF") end)
+local e3 = makeBtn(esp, "ESP Map: OFF", 0.38, Color3.fromRGB(180, 50, 50))
+e3.MouseButton1Click:Connect(function() Hub.mapESP = not Hub.mapESP toggleBtn(e3, Hub.mapESP, "ESP Map: ON", "ESP Map: OFF") end)
+local e4 = makeBtn(esp, "ESP Players: OFF", 0.54, Color3.fromRGB(180, 50, 50))
+e4.MouseButton1Click:Connect(function() Hub.playerESP = not Hub.playerESP toggleBtn(e4, Hub.playerESP, "ESP Players: ON", "ESP Players: OFF") end)
+
+local m1 = makeBtn(misc, "Clean Vision: OFF", 0.06, Color3.fromRGB(180, 50, 50))
+m1.MouseButton1Click:Connect(function() Hub.setCleanVision(not Hub.cleanVision) toggleBtn(m1, Hub.cleanVision, "Clean Vision: ON", "Clean Vision: OFF") end)
+local m2 = makeBtn(misc, "Anti Radio: OFF", 0.22, Color3.fromRGB(180, 50, 50))
+m2.MouseButton1Click:Connect(function() Hub.setAntiRadio(not Hub.antiRadio) toggleBtn(m2, Hub.antiRadio, "Anti Radio: ON", "Anti Radio: OFF") end)
+local m3 = makeBtn(misc, "God Detector: OFF", 0.38, Color3.fromRGB(180, 50, 50))
+m3.MouseButton1Click:Connect(function() Hub.godCheckerOn = not Hub.godCheckerOn toggleBtn(m3, Hub.godCheckerOn, "God Detector: ON", "God Detector: OFF") end)
+
+local a1 = makeBtn(farm, "Anti AFK: OFF", 0.06, Color3.fromRGB(180, 50, 50))
+a1.MouseButton1Click:Connect(function() setAntiAfk(not Hub.antiAfk) toggleBtn(a1, Hub.antiAfk, "Anti AFK: ON", "Anti AFK: OFF") end)
+local a2 = makeBtn(farm, "Auto Farm Wins: OFF", 0.22, Color3.fromRGB(180, 50, 50))
+a2.MouseButton1Click:Connect(function()
+	if Hub.autoFarm then stopAutoFarm() else Hub.autoFarm = true startAutoFarm() end
+	toggleBtn(a2, Hub.autoFarm, "Auto Farm Wins: ON", "Auto Farm Wins: OFF")
+end)
+local speedBox = Instance.new("TextBox")
+speedBox.Size, speedBox.Position = UDim2.new(0.9, 0, 0, 26), UDim2.new(0.05, 0, 0.42, 0)
+speedBox.BackgroundColor3, speedBox.Text, speedBox.PlaceholderText = Color3.fromRGB(40, 40, 55), tostring(Hub.farmSpeed), "25-50"
+speedBox.TextColor3, speedBox.Font, speedBox.TextSize, speedBox.Parent = Color3.fromRGB(255, 255, 255), Enum.Font.Gotham, 13, farm
+Instance.new("UICorner", speedBox).CornerRadius = UDim.new(0, 5)
+speedBox.FocusLost:Connect(function()
+	Hub.farmSpeed = clampSpeed(speedBox.Text)
+	speedBox.Text = tostring(Hub.farmSpeed)
+end)
+local info = Instance.new("TextLabel")
+info.Size, info.Position, info.BackgroundTransparency = UDim2.new(0.9, 0, 0, 36), UDim2.new(0.05, 0, 0.58, 0), 1
+info.Text, info.TextColor3, info.Font, info.TextSize = "Y 1820  platform follows\nX 1-100  Z 100-400", Color3.fromRGB(140, 145, 165), Enum.Font.Gotham, 11
+info.TextXAlignment, info.Parent = Enum.TextXAlignment.Left, farm
