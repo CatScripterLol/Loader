@@ -108,11 +108,11 @@ local function runTerms()
 	return result
 end
 
-runLoading()
 if not runTerms() then
 	pcall(function() player:Kick("You clicked Disagree, so you will not be able to use this script.") end)
 	return
 end
+runLoading()
 
 local ok, src = pcall(function()
 	return game:HttpGet(BASE .. "UI/InsaneElevator?t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(1,999999999)))
