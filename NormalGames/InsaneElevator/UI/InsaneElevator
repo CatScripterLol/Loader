@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.4.1"
+local LOCAL_VERSION = "1.4.2"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 
 local ALLOWED_PLACE = 4104106043
@@ -303,39 +303,75 @@ function Hub.setCleanVision(on)
 end
 
 function Hub.scanFloor()
-	local result = Hub.lastFloorName or "Unknown"
+	local result = nil
 	pcall(function()
-		local skip = {elevator=true, baseplate=true, camera=true, terrain=true, lobby=true, shop=true, spawn=true, map=true, parts=true, folder=true}
-		for _, v in pairs(workspace:GetChildren()) do
-			if v:IsA("Model") or v:IsA("Folder") then
-				local n = v.Name
-				local ln = string.lower(n)
-				if not Players:FindFirstChild(n) and not skip[ln] and #n > 2
-					and not string.find(ln, "elevator") and not string.find(ln, "spawn")
-					and not string.find(ln, "lobby") and not string.find(ln, "shop")
-					and not string.find(ln, "vip") and not string.find(ln, "camera") then
-					if v:FindFirstChildOfClass("Humanoid") or v:FindFirstChild("Map") or v:FindFirstChild("Floor") or string.find(ln, "floor")
-						or string.find(ln, "killer") or string.find(ln, "boss") or string.find(ln, "trex") or string.find(ln, "terminator")
-						or string.find(ln, "john") or string.find(ln, "scp") or string.find(ln, "granny") or string.find(ln, "piggy")
-						or string.find(ln, "slender") or string.find(ln, "siren") or string.find(ln, "jeff") or string.find(ln, "baldi")
-						or string.find(ln, "among") or string.find(ln, "alien") or string.find(ln, "cartoon") or string.find(ln, "penny")
-						or string.find(ln, "puppet") or string.find(ln, "entity") then
-						result = n
+		local function goodName(n)
+			if not n or n == "" then return false end
+			local ln = string.lower(n)
+			if #n < 2 or #n > 60 then return false end
+			local bad = {
+				"elevator","baseplate","camera","terrain","lobby","shop","spawn",
+				"map","parts","folder","workspace","currentfloor","floor","unknown",
+				"model","part","spawnlocation","spawns","vip","afk",
+			}
+			for _, b in pairs(bad) do if ln == b then return false end end
+			if string.find(ln, "elevator") or string.find(ln, "spawn") then return false end
+			if Players:FindFirstChild(n) then return false end
+			return true
+		end
+		local tryVals = {"CurrentFloor","Floor","FloorName","CurrentFloorName","ActiveFloor","Stage","Level","RoundFloor"}
+		for _, nm in pairs(tryVals) do
+			local o = workspace:FindFirstChild(nm, true) or RS:FindFirstChild(nm, true)
+			if o then
+				local v = nil
+				if o:IsA("StringValue") or o:IsA("NumberValue") or o:IsA("IntValue") then
+					v = tostring(o.Value)
+				elseif o:IsA("TextLabel") or o:IsA("TextButton") then
+					v = tostring(o.Text)
+				else
+					local sv = o:FindFirstChildWhichIsA("StringValue") or o:FindFirstChildWhichIsA("NumberValue")
+					if sv then v = tostring(sv.Value) end
+					if not v then
+						local tl = o:FindFirstChildWhichIsA("TextLabel", true)
+						if tl then v = tostring(tl.Text) end
+					end
+					if not v then v = o.Name end
+				end
+				if v and goodName(v) and string.lower(v) ~= string.lower(nm) then
+					result = v
+					break
+				end
+			end
+		end
+		if not result then
+			for _, v in pairs(workspace:GetChildren()) do
+				if v:IsA("Model") or v:IsA("Folder") then
+					local n = v.Name
+					if goodName(n) then
+						local ln = string.lower(n)
+						local looksLikeFloor = v:FindFirstChildOfClass("Humanoid")
+							or v:FindFirstChild("Map")
+							or v:FindFirstChild("Floor")
+							or v:FindFirstChildWhichIsA("BasePart")
+							or string.find(ln, "floor")
+							or string.find(ln, "killer")
+							or string.find(ln, "boss")
+							or string.find(ln, "scp")
+							or string.find(ln, "entity")
+						if looksLikeFloor then result = n end
 					end
 				end
 			end
 		end
-		local cf = workspace:FindFirstChild("CurrentFloor") or RS:FindFirstChild("CurrentFloor")
-		if cf then
-			if cf:IsA("StringValue") or cf:IsA("NumberValue") or cf:IsA("IntValue") then result = tostring(cf.Value) else result = cf.Name end
-		end
-		for _, v in pairs(pg:GetDescendants()) do
-			if (v:IsA("TextLabel") or v:IsA("TextButton")) and v.Text then
-				local t = tostring(v.Text)
-				local match = string.match(t, "[Ff]loor%s*[#:]?%s*(%d+)")
-				if match then result = "Floor " .. match break end
-				local ln = string.lower(t)
-				if string.find(ln, "floor") and #t < 40 and #t > 3 then result = t break end
+		if not result then
+			for _, v in pairs(pg:GetDescendants()) do
+				if (v:IsA("TextLabel") or v:IsA("TextButton")) and type(v.Text) == "string" then
+					local t = v.Text
+					local match = string.match(t, "[Ff]loor%s*[#:]?%s*(%d+)")
+					if match then result = "Floor " .. match break end
+					local ln = string.lower(t)
+					if string.find(ln, "floor") and #t > 3 and #t < 40 and goodName(t) then result = t break end
+				end
 			end
 		end
 	end)
@@ -347,22 +383,25 @@ function Hub.predictFloor()
 	local current = Hub.scanFloor()
 	local nextName = "waiting..."
 	pcall(function()
-		local candidates = {
-			workspace:FindFirstChild("NextFloor"), workspace:FindFirstChild("UpcomingFloor"), workspace:FindFirstChild("PredictedFloor"),
-			RS:FindFirstChild("NextFloor"), RS:FindFirstChild("UpcomingFloor"),
-		}
-		for _, o in pairs(candidates) do
+		local names = {"NextFloor","UpcomingFloor","PredictedFloor","NextMap","NextStage"}
+		for _, nm in pairs(names) do
+			local o = workspace:FindFirstChild(nm, true) or RS:FindFirstChild(nm, true)
 			if o then
-				if o:IsA("StringValue") or o:IsA("NumberValue") or o:IsA("IntValue") then nextName = tostring(o.Value) break end
+				if o:IsA("StringValue") or o:IsA("NumberValue") or o:IsA("IntValue") then
+					nextName = tostring(o.Value) break
+				end
+				local sv = o:FindFirstChildWhichIsA("StringValue") or o:FindFirstChildWhichIsA("NumberValue")
+				if sv then nextName = tostring(sv.Value) break end
 				nextName = o.Name break
 			end
 		end
-		local queue = workspace:FindFirstChild("FloorQueue") or RS:FindFirstChild("FloorQueue")
+		local queue = workspace:FindFirstChild("FloorQueue", true) or RS:FindFirstChild("FloorQueue", true)
 		if queue then
 			local kids = queue:GetChildren()
 			if #kids >= 1 then
 				local first = kids[1]
-				nextName = (first:IsA("StringValue") and tostring(first.Value)) or first.Name
+				if first:IsA("StringValue") or first:IsA("NumberValue") then nextName = tostring(first.Value)
+				else nextName = first.Name end
 			end
 		end
 	end)
@@ -399,13 +438,22 @@ end
 
 if not Hub._floorChildConn then
 	Hub._floorChildConn = workspace.ChildAdded:Connect(function(child)
-		task.wait(0.25)
-		if not child or not child.Parent then return end
-		local n = string.lower(child.Name)
-		if (child:IsA("Model") or child:IsA("Folder"))
-			and not string.find(n, "elevator") and not string.find(n, "spawn")
-			and not string.find(n, "lobby") and not Players:FindFirstChild(child.Name) then
-			Hub.lastFloorName = child.Name
+		task.delay(0.15, function()
+			if not child or not child.Parent then return end
+			if not (child:IsA("Model") or child:IsA("Folder")) then return end
+			local n = child.Name
+			local ln = string.lower(n)
+			if Players:FindFirstChild(n) then return end
+			if string.find(ln, "elevator") or string.find(ln, "spawn") or string.find(ln, "lobby")
+				or string.find(ln, "shop") or string.find(ln, "camera") or ln == "terrain" then
+				return
+			end
+			if #n >= 2 then Hub.lastFloorName = n end
+		end)
+	end)
+	workspace.ChildRemoved:Connect(function(child)
+		if Hub.lastFloorName == child.Name then
+			task.defer(function() Hub.scanFloor() end)
 		end
 	end)
 end
@@ -431,9 +479,9 @@ RunService.Heartbeat:Connect(function()
 	if Hub.godCheckerOn then
 		local users = Hub.getGodUsers()
 		if godLabel then
-			if #users == 0 then godLabel.Text = "God: none"
+			if #users == 0 then godLabel.Text = "God Mode Detector: none"
 			else
-				local lines, line = {}, "God: "
+				local lines, line = {}, "God Mode Detector: "
 				for i, u in ipairs(users) do
 					local add = (i == 1 and u) or (", " .. u)
 					if #line + #add > 28 then table.insert(lines, line) line = u else line = line .. add end
@@ -442,7 +490,7 @@ RunService.Heartbeat:Connect(function()
 				godLabel.Text = table.concat(lines, "\n")
 			end
 		end
-	elseif godLabel then godLabel.Text = "God: off" end
+	elseif godLabel then godLabel.Text = "God Mode Detector: off" end
 	if Hub.killerESP then
 		Hub.clearHighlights(Hub.killerHighlights)
 		for _, v in pairs(workspace:GetDescendants()) do
@@ -591,7 +639,7 @@ m4.MouseButton1Click:Connect(function() Hub.predVisible = not Hub.predVisible to
 
 godLabel = Instance.new("TextLabel")
 godLabel.Size, godLabel.Position = UDim2.new(0.9, 0, 0, 48), UDim2.new(0.05, 0, 0.58, 0)
-godLabel.BackgroundTransparency, godLabel.Text = 1, "God: off"
+godLabel.BackgroundTransparency, godLabel.Text = 1, "God Mode Detector: off"
 godLabel.TextColor3, godLabel.Font, godLabel.TextSize = Color3.fromRGB(200, 180, 120), Enum.Font.Gotham, 11
 godLabel.TextXAlignment, godLabel.TextYAlignment = Enum.TextXAlignment.Left, Enum.TextYAlignment.Top
 godLabel.TextWrapped, godLabel.Parent = true, misc
@@ -643,9 +691,7 @@ local function randomFarmPos(fromPos)
 		local x = FARM_CX + math.random(-FARM_HALF, FARM_HALF)
 		local z = FARM_CZ + math.random(-FARM_HALF, FARM_HALF)
 		target = Vector3.new(x, FARM_Y, z)
-		if not fromPos or (fromPos - target).Magnitude >= FARM_MIN_DIST then
-			return target
-		end
+		if not fromPos or (fromPos - target).Magnitude >= FARM_MIN_DIST then return target end
 	end
 	return target or Vector3.new(FARM_CX, FARM_Y, FARM_CZ)
 end
@@ -657,11 +703,7 @@ local function farmOnce()
 	local target = randomFarmPos(hrp.Position)
 	pcall(function()
 		local char = player.Character
-		if char and char.PrimaryPart then
-			char:PivotTo(CFrame.new(target))
-		else
-			hrp.CFrame = CFrame.new(target)
-		end
+		if char and char.PrimaryPart then char:PivotTo(CFrame.new(target)) else hrp.CFrame = CFrame.new(target) end
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
 	end)
