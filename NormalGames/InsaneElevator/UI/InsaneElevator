@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.4.3"
+local LOCAL_VERSION = "1.4.4"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 
 local ALLOWED_PLACE = 4104106043
@@ -720,7 +720,7 @@ local function clampSpeed(n)
 end
 local FARM_Y = 1820
 local FARM_CX, FARM_CZ = 2, -3
-local FARM_HALF = 300
+local FARM_HALF = 500
 local FARM_MIN_DIST = 120
 local function randomFarmPos(fromPos)
 	local target
@@ -734,16 +734,29 @@ local function randomFarmPos(fromPos)
 end
 local function farmOnce()
 	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if not hrp then return end
+	if not hrp then task.wait(0.3) return end
 	ensurePlatform()
 	stopFarmTween()
 	local target = randomFarmPos(hrp.Position)
-	pcall(function()
-		local char = player.Character
-		if char and char.PrimaryPart then char:PivotTo(CFrame.new(target)) else hrp.CFrame = CFrame.new(target) end
-		hrp.AssemblyLinearVelocity = Vector3.zero
-		hrp.AssemblyAngularVelocity = Vector3.zero
+	local speed = clampSpeed(Hub.farmSpeed)
+	Hub.farmSpeed = speed
+	local dist = (hrp.Position - target).Magnitude
+	local t = math.clamp(dist / math.max(speed, 1), 0.15, 90)
+	local tw = TweenService:Create(hrp, TweenInfo.new(t, Enum.EasingStyle.Linear), {CFrame = CFrame.new(target)})
+	Hub._farmTween = tw
+	local done = false
+	local c
+	c = tw.Completed:Connect(function()
+		done = true
+		if c then c:Disconnect() end
 	end)
+	tw:Play()
+	local t0 = tick()
+	while not done and Hub.autoFarm and farmRunning do
+		if not hrp.Parent or tick() - t0 > t + 2 then break end
+		task.wait(0.1)
+	end
+	stopFarmTween()
 end
 local function startAutoFarm()
 	if farmRunning then return end
@@ -753,9 +766,7 @@ local function startAutoFarm()
 		while Hub.autoFarm and farmRunning do
 			pcall(farmOnce)
 			if not Hub.autoFarm or not farmRunning then break end
-			local speed = clampSpeed(Hub.farmSpeed)
-			Hub.farmSpeed = speed
-			task.wait(math.clamp(60 / speed, 0.12, 3))
+			task.wait()
 		end
 		farmRunning = false
 		stopFarmTween()
@@ -790,5 +801,5 @@ speedBox.FocusLost:Connect(function()
 end)
 local info = Instance.new("TextLabel")
 info.Size, info.Position, info.BackgroundTransparency = UDim2.new(0.9, 0, 0, 40), UDim2.new(0.05, 0, 0.58, 0), 1
-info.Text, info.TextColor3, info.Font, info.TextSize = "TP + speed delay  600x600  min 120\nY 1820  speed controls wait", Color3.fromRGB(140, 145, 165), Enum.Font.Gotham, 11
+info.Text, info.TextColor3, info.Font, info.TextSize = "Tween farm  1000x1000  min 120\nY 1820  speed = studs/sec", Color3.fromRGB(140, 145, 165), Enum.Font.Gotham, 11
 info.TextXAlignment, info.Parent = Enum.TextXAlignment.Left, farm
