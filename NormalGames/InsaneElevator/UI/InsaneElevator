@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.4.4"
+local LOCAL_VERSION = "1.4.5"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 
 local ALLOWED_PLACE = 4104106043
@@ -426,36 +426,8 @@ end
 
 function Hub.predictFloor()
 	local current = Hub.scanFloor()
-	local nextName = "waiting..."
-	pcall(function()
-		local names = {"NextFloor","UpcomingFloor","PredictedFloor","NextMap","NextStage"}
-		for _, nm in pairs(names) do
-			local o = workspace:FindFirstChild(nm, true) or RS:FindFirstChild(nm, true)
-			if o then
-				if o:IsA("StringValue") or o:IsA("NumberValue") or o:IsA("IntValue") then nextName = tostring(o.Value) break end
-				local sv = o:FindFirstChildWhichIsA("StringValue") or o:FindFirstChildWhichIsA("NumberValue")
-				if sv then nextName = tostring(sv.Value) break end
-				nextName = o.Name break
-			end
-		end
-		local queue = workspace:FindFirstChild("FloorQueue", true) or RS:FindFirstChild("FloorQueue", true)
-		if queue then
-			local kids = queue:GetChildren()
-			if #kids >= 1 then
-				local first = kids[1]
-				if first:IsA("StringValue") or first:IsA("NumberValue") then nextName = tostring(first.Value) else nextName = first.Name end
-			end
-		end
-	end)
-	if current and current ~= "Unknown" then
-		local hist = Hub._floorHistory
-		if #hist == 0 or hist[#hist] ~= current then
-			table.insert(hist, current)
-			if #hist > 8 then table.remove(hist, 1) end
-		end
-	end
-	Hub.predictedFloor = nextName
-	return current, Hub.predictedFloor
+	Hub.predictedFloor = current
+	return current
 end
 
 function Hub.getGodUsers()
@@ -504,14 +476,12 @@ RunService.Heartbeat:Connect(function()
 	lastTick = now
 	if Hub.cleanVision then enforceCleanVision() end
 	if Hub.antiRadio then Hub.handleAntiRadio() end
-	local floor, pred = Hub.predictFloor()
+	local floor = Hub.predictFloor()
 	if floorLabel then
-		if Hub.predVisible then floorLabel.Text = "Floor: " .. tostring(floor) .. "  |  Next: " .. tostring(pred)
-		else floorLabel.Text = "Floor: " .. tostring(floor) end
+		floorLabel.Text = "Floor: " .. tostring(floor)
 	end
 	if predLabel then
-		predLabel.Visible = Hub.predVisible
-		if Hub.predVisible then predLabel.Text = "Current: " .. tostring(floor) .. "\nNext: " .. tostring(pred) end
+		predLabel.Text = "Floor: " .. tostring(floor)
 	end
 	if Hub.godCheckerOn then
 		local users = Hub.getGodUsers()
@@ -671,20 +641,18 @@ local m2 = makeBtn(misc, "Anti Radio: OFF", 0.18, COL_OFF)
 m2.MouseButton1Click:Connect(function() Hub.setAntiRadio(not Hub.antiRadio) toggleBtn(m2, Hub.antiRadio, "Anti Radio: ON", "Anti Radio: OFF") end)
 local m3 = makeBtn(misc, "God Mode Detector: OFF", 0.31, COL_OFF)
 m3.MouseButton1Click:Connect(function() Hub.godCheckerOn = not Hub.godCheckerOn toggleBtn(m3, Hub.godCheckerOn, "God Mode Detector: ON", "God Mode Detector: OFF") end)
-local m4 = makeBtn(misc, "Floor Predictor: ON", 0.44, COL_ON)
-m4.MouseButton1Click:Connect(function() Hub.predVisible = not Hub.predVisible toggleBtn(m4, Hub.predVisible, "Floor Predictor: ON", "Floor Predictor: OFF") end)
 
 godLabel = Instance.new("TextLabel")
-godLabel.Size, godLabel.Position = UDim2.new(0.9, 0, 0, 48), UDim2.new(0.05, 0, 0.58, 0)
+godLabel.Size, godLabel.Position = UDim2.new(0.9, 0, 0, 48), UDim2.new(0.05, 0, 0.48, 0)
 godLabel.BackgroundTransparency, godLabel.Text = 1, "God Mode Detector: off"
 godLabel.TextColor3, godLabel.Font, godLabel.TextSize = Color3.fromRGB(200, 180, 120), Enum.Font.Gotham, 11
 godLabel.TextXAlignment, godLabel.TextYAlignment = Enum.TextXAlignment.Left, Enum.TextYAlignment.Top
 godLabel.TextWrapped, godLabel.Parent = true, misc
 
 predLabel = Instance.new("TextLabel")
-predLabel.Size, predLabel.Position = UDim2.new(0.9, 0, 0, 40), UDim2.new(0.05, 0, 0.78, 0)
-predLabel.BackgroundTransparency, predLabel.Text = 1, "Current: ...\nNext: ..."
-predLabel.TextColor3, predLabel.Font, predLabel.TextSize = Color3.fromRGB(120, 200, 255), Enum.Font.Gotham, 11
+predLabel.Size, predLabel.Position = UDim2.new(0.9, 0, 0, 28), UDim2.new(0.05, 0, 0.72, 0)
+predLabel.BackgroundTransparency, predLabel.Text = 1, "Floor: ..."
+predLabel.TextColor3, predLabel.Font, predLabel.TextSize = Color3.fromRGB(120, 200, 255), Enum.Font.Gotham, 12
 predLabel.TextXAlignment, predLabel.TextYAlignment = Enum.TextXAlignment.Left, Enum.TextYAlignment.Top
 predLabel.TextWrapped, predLabel.Parent = true, misc
 
