@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.4.2"
+local LOCAL_VERSION = "1.4.3"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 
 local ALLOWED_PLACE = 4104106043
@@ -73,6 +73,7 @@ Hub._radioConn = nil
 Hub._radioPlayerConn = nil
 Hub._floorChildConn = nil
 Hub._mutedSounds = {}
+Hub._hiddenRadios = {}
 
 local COL_OFF = Color3.fromRGB(55, 55, 70)
 local COL_ON = Color3.fromRGB(40, 150, 75)
@@ -150,11 +151,27 @@ end
 
 function Hub.removeRadiosFromEveryone()
 	pcall(function()
+		if not Hub._hiddenRadios then Hub._hiddenRadios = {} end
+		if not Hub._mutedSounds then Hub._mutedSounds = {} end
+		local function hideTool(t)
+			if not t or not t.Parent then return end
+			if Hub._hiddenRadios[t] then return end
+			Hub._hiddenRadios[t] = t.Parent
+			t.Parent = nil
+		end
+		local function muteSound(s)
+			if not s or not s:IsA("Sound") then return end
+			if not Hub._mutedSounds[s] then
+				Hub._mutedSounds[s] = {Volume = s.Volume, Playing = s.Playing, TimePosition = s.TimePosition}
+			end
+			s.Volume = 0
+			pcall(function() s:Stop() end)
+		end
 		for _, plr in pairs(Players:GetPlayers()) do
 			local function wipe(parent)
 				if not parent then return end
 				for _, t in pairs(parent:GetChildren()) do
-					if (t:IsA("Tool") or t:IsA("HopperBin")) and isRadioName(t.Name) then pcall(function() t:Destroy() end) end
+					if (t:IsA("Tool") or t:IsA("HopperBin")) and isRadioName(t.Name) then hideTool(t) end
 				end
 			end
 			wipe(plr:FindFirstChild("Backpack"))
@@ -162,12 +179,38 @@ function Hub.removeRadiosFromEveryone()
 			wipe(plr:FindFirstChild("StarterGear"))
 		end
 		for _, v in pairs(workspace:GetDescendants()) do
-			if v:IsA("Tool") and isRadioName(v.Name) then pcall(function() v:Destroy() end)
-			elseif v:IsA("Sound") and isRadioName(v.Name) then pcall(function() v.Volume = 0 v:Stop() v:Destroy() end) end
+			if v:IsA("Tool") and isRadioName(v.Name) then hideTool(v)
+			elseif v:IsA("Sound") and isRadioName(v.Name) then muteSound(v) end
 		end
 		for _, v in pairs(SoundService:GetDescendants()) do
-			if v:IsA("Sound") and isRadioName(v.Name) then pcall(function() v.Volume = 0 v:Stop() v:Destroy() end) end
+			if v:IsA("Sound") and isRadioName(v.Name) then muteSound(v) end
 		end
+	end)
+end
+
+function Hub.restoreRadios()
+	pcall(function()
+		for tool, parent in pairs(Hub._hiddenRadios or {}) do
+			if tool then
+				pcall(function()
+					if parent and parent.Parent then tool.Parent = parent
+					elseif player:FindFirstChild("Backpack") then tool.Parent = player.Backpack end
+				end)
+			end
+		end
+		table.clear(Hub._hiddenRadios or {})
+		for snd, data in pairs(Hub._mutedSounds or {}) do
+			if snd and snd.Parent then
+				pcall(function()
+					snd.Volume = data.Volume or 1
+					if data.Playing then
+						snd.TimePosition = data.TimePosition or 0
+						snd:Play()
+					end
+				end)
+			end
+		end
+		table.clear(Hub._mutedSounds or {})
 	end)
 end
 
@@ -185,15 +228,33 @@ function Hub.setAntiRadio(on)
 			if not Hub.antiRadio then return end
 			task.defer(function()
 				if not obj or not obj.Parent then return end
-				if (obj:IsA("Tool") or obj:IsA("HopperBin")) and isRadioName(obj.Name) then pcall(function() obj:Destroy() end)
-				elseif obj:IsA("Sound") and isRadioName(obj.Name) then pcall(function() obj.Volume = 0 obj:Stop() obj:Destroy() end) end
+				if (obj:IsA("Tool") or obj:IsA("HopperBin")) and isRadioName(obj.Name) then
+					if not Hub._hiddenRadios then Hub._hiddenRadios = {} end
+					if not Hub._hiddenRadios[obj] then
+						Hub._hiddenRadios[obj] = obj.Parent
+						obj.Parent = nil
+					end
+				elseif obj:IsA("Sound") and isRadioName(obj.Name) then
+					if not Hub._mutedSounds then Hub._mutedSounds = {} end
+					if not Hub._mutedSounds[obj] then
+						Hub._mutedSounds[obj] = {Volume = obj.Volume, Playing = obj.Playing, TimePosition = obj.TimePosition}
+					end
+					obj.Volume = 0
+					pcall(function() obj:Stop() end)
+				end
 			end)
 		end)
 		local function hookContainer(cont)
 			if not cont then return end
 			cont.ChildAdded:Connect(function(c)
 				if Hub.antiRadio and (c:IsA("Tool") or c:IsA("HopperBin")) and isRadioName(c.Name) then
-					task.defer(function() pcall(function() c:Destroy() end) end)
+					task.defer(function()
+						if not Hub._hiddenRadios then Hub._hiddenRadios = {} end
+						if c.Parent and not Hub._hiddenRadios[c] then
+							Hub._hiddenRadios[c] = c.Parent
+							c.Parent = nil
+						end
+					end)
 				end
 			end)
 		end
@@ -211,6 +272,8 @@ function Hub.setAntiRadio(on)
 				plr.CharacterAdded:Connect(function(char) hookContainer(char) end)
 			end)
 		end)
+	else
+		Hub.restoreRadios()
 	end
 end
 
@@ -309,11 +372,7 @@ function Hub.scanFloor()
 			if not n or n == "" then return false end
 			local ln = string.lower(n)
 			if #n < 2 or #n > 60 then return false end
-			local bad = {
-				"elevator","baseplate","camera","terrain","lobby","shop","spawn",
-				"map","parts","folder","workspace","currentfloor","floor","unknown",
-				"model","part","spawnlocation","spawns","vip","afk",
-			}
+			local bad = {"elevator","baseplate","camera","terrain","lobby","shop","spawn","map","parts","folder","workspace","currentfloor","floor","unknown","model","part","spawnlocation","spawns","vip","afk"}
 			for _, b in pairs(bad) do if ln == b then return false end end
 			if string.find(ln, "elevator") or string.find(ln, "spawn") then return false end
 			if Players:FindFirstChild(n) then return false end
@@ -324,23 +383,15 @@ function Hub.scanFloor()
 			local o = workspace:FindFirstChild(nm, true) or RS:FindFirstChild(nm, true)
 			if o then
 				local v = nil
-				if o:IsA("StringValue") or o:IsA("NumberValue") or o:IsA("IntValue") then
-					v = tostring(o.Value)
-				elseif o:IsA("TextLabel") or o:IsA("TextButton") then
-					v = tostring(o.Text)
+				if o:IsA("StringValue") or o:IsA("NumberValue") or o:IsA("IntValue") then v = tostring(o.Value)
+				elseif o:IsA("TextLabel") or o:IsA("TextButton") then v = tostring(o.Text)
 				else
 					local sv = o:FindFirstChildWhichIsA("StringValue") or o:FindFirstChildWhichIsA("NumberValue")
 					if sv then v = tostring(sv.Value) end
-					if not v then
-						local tl = o:FindFirstChildWhichIsA("TextLabel", true)
-						if tl then v = tostring(tl.Text) end
-					end
+					if not v then local tl = o:FindFirstChildWhichIsA("TextLabel", true) if tl then v = tostring(tl.Text) end end
 					if not v then v = o.Name end
 				end
-				if v and goodName(v) and string.lower(v) ~= string.lower(nm) then
-					result = v
-					break
-				end
+				if v and goodName(v) and string.lower(v) ~= string.lower(nm) then result = v break end
 			end
 		end
 		if not result then
@@ -349,16 +400,10 @@ function Hub.scanFloor()
 					local n = v.Name
 					if goodName(n) then
 						local ln = string.lower(n)
-						local looksLikeFloor = v:FindFirstChildOfClass("Humanoid")
-							or v:FindFirstChild("Map")
-							or v:FindFirstChild("Floor")
-							or v:FindFirstChildWhichIsA("BasePart")
-							or string.find(ln, "floor")
-							or string.find(ln, "killer")
-							or string.find(ln, "boss")
-							or string.find(ln, "scp")
-							or string.find(ln, "entity")
-						if looksLikeFloor then result = n end
+						if v:FindFirstChildOfClass("Humanoid") or v:FindFirstChild("Map") or v:FindFirstChild("Floor") or v:FindFirstChildWhichIsA("BasePart")
+							or string.find(ln, "floor") or string.find(ln, "killer") or string.find(ln, "boss") or string.find(ln, "scp") or string.find(ln, "entity") then
+							result = n
+						end
 					end
 				end
 			end
@@ -387,9 +432,7 @@ function Hub.predictFloor()
 		for _, nm in pairs(names) do
 			local o = workspace:FindFirstChild(nm, true) or RS:FindFirstChild(nm, true)
 			if o then
-				if o:IsA("StringValue") or o:IsA("NumberValue") or o:IsA("IntValue") then
-					nextName = tostring(o.Value) break
-				end
+				if o:IsA("StringValue") or o:IsA("NumberValue") or o:IsA("IntValue") then nextName = tostring(o.Value) break end
 				local sv = o:FindFirstChildWhichIsA("StringValue") or o:FindFirstChildWhichIsA("NumberValue")
 				if sv then nextName = tostring(sv.Value) break end
 				nextName = o.Name break
@@ -400,8 +443,7 @@ function Hub.predictFloor()
 			local kids = queue:GetChildren()
 			if #kids >= 1 then
 				local first = kids[1]
-				if first:IsA("StringValue") or first:IsA("NumberValue") then nextName = tostring(first.Value)
-				else nextName = first.Name end
+				if first:IsA("StringValue") or first:IsA("NumberValue") then nextName = tostring(first.Value) else nextName = first.Name end
 			end
 		end
 	end)
@@ -444,17 +486,12 @@ if not Hub._floorChildConn then
 			local n = child.Name
 			local ln = string.lower(n)
 			if Players:FindFirstChild(n) then return end
-			if string.find(ln, "elevator") or string.find(ln, "spawn") or string.find(ln, "lobby")
-				or string.find(ln, "shop") or string.find(ln, "camera") or ln == "terrain" then
-				return
-			end
+			if string.find(ln, "elevator") or string.find(ln, "spawn") or string.find(ln, "lobby") or string.find(ln, "shop") or string.find(ln, "camera") or ln == "terrain" then return end
 			if #n >= 2 then Hub.lastFloorName = n end
 		end)
 	end)
 	workspace.ChildRemoved:Connect(function(child)
-		if Hub.lastFloorName == child.Name then
-			task.defer(function() Hub.scanFloor() end)
-		end
+		if Hub.lastFloorName == child.Name then task.defer(function() Hub.scanFloor() end) end
 	end)
 end
 
@@ -716,7 +753,9 @@ local function startAutoFarm()
 		while Hub.autoFarm and farmRunning do
 			pcall(farmOnce)
 			if not Hub.autoFarm or not farmRunning then break end
-			task.wait()
+			local speed = clampSpeed(Hub.farmSpeed)
+			Hub.farmSpeed = speed
+			task.wait(math.clamp(60 / speed, 0.12, 3))
 		end
 		farmRunning = false
 		stopFarmTween()
@@ -751,5 +790,5 @@ speedBox.FocusLost:Connect(function()
 end)
 local info = Instance.new("TextLabel")
 info.Size, info.Position, info.BackgroundTransparency = UDim2.new(0.9, 0, 0, 40), UDim2.new(0.05, 0, 0.58, 0), 1
-info.Text, info.TextColor3, info.Font, info.TextSize = "Instant TP  600x600  min dist 120\nY 1820  center near AFK", Color3.fromRGB(140, 145, 165), Enum.Font.Gotham, 11
+info.Text, info.TextColor3, info.Font, info.TextSize = "TP + speed delay  600x600  min 120\nY 1820  speed controls wait", Color3.fromRGB(140, 145, 165), Enum.Font.Gotham, 11
 info.TextXAlignment, info.Parent = Enum.TextXAlignment.Left, farm
