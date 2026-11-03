@@ -1,142 +1,109 @@
-local BASE = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/"
-
+local ALLOWED_PLACE = 4104106043
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
-local pg = player:WaitForChild("PlayerGui")
-
-local function tween(obj, ti, props)
-	local t = TweenService:Create(obj, ti, props)
-	t:Play()
-	return t
+if not player then return end
+if game.PlaceId ~= ALLOWED_PLACE then
+	warn("[ElevatorHub] Wrong place id")
+	return
 end
 
+local BASE = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/"
+local pg = player:WaitForChild("PlayerGui")
+
 local function runLoading()
-	local done, skipped = false, false
-	local duration = 2 + math.random()
+	if pg:FindFirstChild("ElevatorLoading") then pg.ElevatorLoading:Destroy() end
 	local gui = Instance.new("ScreenGui")
-	gui.Name, gui.IgnoreGuiInset, gui.ResetOnSpawn, gui.DisplayOrder = "ElevatorBoot", true, false, 9999
+	gui.Name, gui.ResetOnSpawn, gui.IgnoreGuiInset, gui.DisplayOrder = "ElevatorLoading", false, true, 10000
 	gui.Parent = pg
-
-	local panel = Instance.new("Frame")
-	panel.Size, panel.Position = UDim2.new(1, 0, 1, 0), UDim2.new(1, 0, 0, 0)
-	panel.BackgroundColor3, panel.BorderSizePixel, panel.Parent = Color3.fromRGB(10, 10, 16), 0, gui
-
+	local frame = Instance.new("Frame")
+	frame.Size, frame.Position = UDim2.new(1, 0, 1, 0), UDim2.new(1, 0, 0, 0)
+	frame.BackgroundColor3, frame.BorderSizePixel, frame.Parent = Color3.fromRGB(12, 12, 18), 0, gui
 	local title = Instance.new("TextLabel")
-	title.Size, title.Position, title.BackgroundTransparency = UDim2.new(1, -40, 0, 36), UDim2.new(0, 28, 0.38, 0), 1
-	title.Text, title.TextColor3, title.Font, title.TextSize = "ElevatorHub", Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold, 32
-	title.TextXAlignment, title.Parent = Enum.TextXAlignment.Left, panel
-
+	title.Size, title.Position = UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0.42, 0)
+	title.BackgroundTransparency, title.Text = 1, "ElevatorHub"
+	title.TextColor3, title.Font, title.TextSize = Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold, 28
+	title.Parent = frame
 	local sub = Instance.new("TextLabel")
-	sub.Size, sub.Position, sub.BackgroundTransparency = UDim2.new(1, -40, 0, 22), UDim2.new(0, 28, 0.38, 40), 1
-	sub.Text, sub.TextColor3, sub.Font, sub.TextSize = "Insane Elevator", Color3.fromRGB(130, 140, 170), Enum.Font.Gotham, 16
-	sub.TextXAlignment, sub.Parent = Enum.TextXAlignment.Left, panel
-
-	local status = Instance.new("TextLabel")
-	status.Size, status.Position, status.BackgroundTransparency = UDim2.new(0.6, 0, 0, 18), UDim2.new(0, 28, 0.55, 0), 1
-	status.Text, status.TextColor3, status.Font, status.TextSize = "Preparing...", Color3.fromRGB(160, 165, 190), Enum.Font.Gotham, 14
-	status.TextXAlignment, status.Parent = Enum.TextXAlignment.Left, panel
-
-	local pct = Instance.new("TextLabel")
-	pct.Size, pct.Position, pct.BackgroundTransparency = UDim2.new(0, 70, 0, 18), UDim2.new(1, -100, 0.55, 0), 1
-	pct.Text, pct.TextColor3, pct.Font, pct.TextSize = "0%", Color3.fromRGB(210, 215, 240), Enum.Font.GothamBold, 14
-	pct.TextXAlignment, pct.Parent = Enum.TextXAlignment.Right, panel
-
+	sub.Size, sub.Position = UDim2.new(1, 0, 0, 24), UDim2.new(0, 0, 0.42, 40)
+	sub.BackgroundTransparency, sub.Text = 1, "Loading..."
+	sub.TextColor3, sub.Font, sub.TextSize = Color3.fromRGB(160, 165, 190), Enum.Font.Gotham, 14
+	sub.Parent = frame
 	local barBg = Instance.new("Frame")
-	barBg.Size, barBg.Position = UDim2.new(1, -56, 0, 10), UDim2.new(0, 28, 0.55, 28)
-	barBg.BackgroundColor3, barBg.BorderSizePixel, barBg.Parent = Color3.fromRGB(32, 32, 48), 0, panel
-	Instance.new("UICorner", barBg).CornerRadius = UDim.new(1, 0)
-	local barClip = Instance.new("Frame")
-	barClip.Size, barClip.BackgroundTransparency, barClip.ClipsDescendants, barClip.BorderSizePixel = UDim2.new(1, 0, 1, 0), 1, true, 0
-	barClip.Parent = barBg
+	barBg.Size, barBg.Position = UDim2.new(0.4, 0, 0, 6), UDim2.new(0.3, 0, 0.55, 0)
+	barBg.BackgroundColor3, barBg.BorderSizePixel, barBg.Parent = Color3.fromRGB(35, 35, 48), 0, frame
+	Instance.new("UICorner", barBg).CornerRadius = UDim.new(0, 3)
 	local bar = Instance.new("Frame")
-	bar.Size, bar.BackgroundColor3, bar.BorderSizePixel, bar.Parent = UDim2.new(0, 0, 1, 0), Color3.fromRGB(90, 120, 255), 0, barClip
-	Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
-	local glow = Instance.new("Frame")
-	glow.Size, glow.Position = UDim2.new(0, 24, 1, 0), UDim2.new(1, -24, 0, 0)
-	glow.BackgroundColor3, glow.BorderSizePixel, glow.Parent = Color3.fromRGB(160, 180, 255), 0, bar
-	glow.BackgroundTransparency = 0.45
-	Instance.new("UICorner", glow).CornerRadius = UDim.new(1, 0)
-
+	bar.Size, bar.BackgroundColor3, bar.BorderSizePixel, bar.Parent = UDim2.new(0, 0, 1, 0), Color3.fromRGB(90, 140, 255), 0, barBg
+	Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 3)
+	local pct = Instance.new("TextLabel")
+	pct.Size, pct.Position = UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0.55, 14)
+	pct.BackgroundTransparency, pct.Text = 1, "0%"
+	pct.TextColor3, pct.Font, pct.TextSize = Color3.fromRGB(200, 200, 220), Enum.Font.Gotham, 13
+	pct.Parent = frame
 	local skip = Instance.new("TextButton")
-	skip.Size, skip.Position = UDim2.new(0, 90, 0, 32), UDim2.new(0.5, -45, 0.72, 0)
-	skip.BackgroundColor3, skip.Text, skip.TextColor3 = Color3.fromRGB(40, 40, 58), "Skip", Color3.fromRGB(210, 210, 230)
-	skip.Font, skip.TextSize, skip.Visible, skip.Parent = Enum.Font.GothamBold, 13, false, panel
-	Instance.new("UICorner", skip).CornerRadius = UDim.new(0, 8)
-
-	tween(panel, TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}).Completed:Wait()
-
-	local messages = {"Preparing...", "Loading modules...", "Almost ready...", "Finishing..."}
-	local start = tick()
-	local progress = 0
-	local display = 0
-	local barTw = nil
-
-	local function setBar(p)
-		p = math.clamp(p, 0, 1)
-		if barTw then pcall(function() barTw:Cancel() end) end
-		barTw = tween(bar, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Size = UDim2.new(p, 0, 1, 0),
-		})
-		pct.Text = math.floor(p * 100 + 0.5) .. "%"
-		status.Text = messages[math.clamp(math.floor(p * #messages) + 1, 1, #messages)]
-		skip.Visible = p >= 0.4
-	end
-
+	skip.Size, skip.Position = UDim2.new(0, 80, 0, 28), UDim2.new(0.5, -40, 0.62, 0)
+	skip.BackgroundColor3, skip.Text, skip.TextColor3 = Color3.fromRGB(50, 50, 70), "Skip", Color3.fromRGB(255, 255, 255)
+	skip.Font, skip.TextSize, skip.Visible, skip.Parent = Enum.Font.GothamBold, 13, false, frame
+	Instance.new("UICorner", skip).CornerRadius = UDim.new(0, 6)
+	local done, skipped = false, false
 	skip.MouseButton1Click:Connect(function()
-		if progress >= 0.4 then skipped, done = true, true end
+		if bar.Size.X.Scale < 0.4 then return end
+		skipped = true
 	end)
-
-	while not done do
-		local target = math.clamp((tick() - start) / duration, 0, 1)
-		if skipped then target = 1 end
-		progress = target
-		display = display + (target - display) * 0.22
-		if math.abs(target - display) < 0.002 then display = target end
-		setBar(display)
-		if progress >= 1 and display >= 0.995 then done = true end
-		task.wait()
+	TweenService:Create(frame, TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}):Play()
+	local duration = 2 + math.random() * 1
+	local t0 = tick()
+	while not done and not skipped do
+		local a = math.clamp((tick() - t0) / duration, 0, 1)
+		local ease = a * a * (3 - 2 * a)
+		bar.Size = UDim2.new(ease, 0, 1, 0)
+		pct.Text = tostring(math.floor(ease * 100)) .. "%"
+		skip.Visible = ease >= 0.4
+		if a >= 1 then done = true end
+		task.wait(0.03)
 	end
-	setBar(1)
-	task.wait(0.12)
-	tween(panel, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(-1, 0, 0, 0)}).Completed:Wait()
+	bar.Size = UDim2.new(1, 0, 1, 0)
+	pct.Text = "100%"
+	local out = TweenService:Create(frame, TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {Position = UDim2.new(-1, 0, 0, 0)})
+	out:Play()
+	out.Completed:Wait()
 	gui:Destroy()
 end
 
 local function runTerms()
-	local result = nil
+	if pg:FindFirstChild("ElevatorTerms") then pg.ElevatorTerms:Destroy() end
 	local gui = Instance.new("ScreenGui")
-	gui.Name, gui.IgnoreGuiInset, gui.ResetOnSpawn, gui.DisplayOrder = "ElevatorTerms", true, false, 10000
+	gui.Name, gui.ResetOnSpawn, gui.IgnoreGuiInset, gui.DisplayOrder = "ElevatorTerms", false, true, 10001
 	gui.Parent = pg
-	local dim = Instance.new("Frame")
-	dim.Size, dim.BackgroundColor3, dim.BackgroundTransparency, dim.BorderSizePixel = UDim2.new(1, 0, 1, 0), Color3.fromRGB(0, 0, 0), 0.35, 0
-	dim.Parent = gui
-	local card = Instance.new("Frame")
-	card.Size, card.Position, card.AnchorPoint = UDim2.new(0, 340, 0, 280), UDim2.new(0.5, 0, 0.5, 0), Vector2.new(0.5, 0.5)
-	card.BackgroundColor3, card.BorderSizePixel, card.Parent = Color3.fromRGB(18, 18, 26), 0, dim
-	Instance.new("UICorner", card).CornerRadius = UDim.new(0, 14)
+	local frame = Instance.new("Frame")
+	frame.Size, frame.Position = UDim2.new(0, 360, 0, 280), UDim2.new(0.5, -180, 0.5, -140)
+	frame.BackgroundColor3, frame.BorderSizePixel, frame.Parent = Color3.fromRGB(22, 22, 32), 0, gui
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
 	local title = Instance.new("TextLabel")
-	title.Size, title.Position, title.BackgroundTransparency = UDim2.new(1, -28, 0, 28), UDim2.new(0, 14, 0, 14), 1
+	title.Size, title.BackgroundTransparency = UDim2.new(1, 0, 0, 36), 1
 	title.Text, title.TextColor3, title.Font, title.TextSize = "Terms of Use", Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold, 18
-	title.TextXAlignment, title.Parent = Enum.TextXAlignment.Left, card
+	title.Parent = frame
 	local body = Instance.new("TextLabel")
-	body.Size, body.Position, body.BackgroundTransparency = UDim2.new(1, -28, 0, 160), UDim2.new(0, 14, 0, 48), 1
+	body.Size, body.Position = UDim2.new(1, -24, 0, 150), UDim2.new(0, 12, 0, 40)
+	body.BackgroundTransparency, body.TextWrapped = 1, true
+	body.TextXAlignment, body.TextYAlignment = Enum.TextXAlignment.Left, Enum.TextYAlignment.Top
 	body.Text = "We are not responsible for bans, win streak loss, account warnings, or any other punishment from Roblox or the game.\n\nThis script is provided as-is. Use at your own risk.\n\nBy clicking Agree you accept these terms. You must accept every time you run this script.\n\nDisagree will kick you and the script will not load."
-	body.TextColor3, body.Font, body.TextSize, body.TextWrapped = Color3.fromRGB(175, 180, 200), Enum.Font.Gotham, 13, true
-	body.TextXAlignment, body.TextYAlignment, body.Parent = Enum.TextXAlignment.Left, Enum.TextYAlignment.Top, card
+	body.TextColor3, body.Font, body.TextSize, body.Parent = Color3.fromRGB(180, 185, 200), Enum.Font.Gotham, 13, frame
+	local result = nil
 	local agree = Instance.new("TextButton")
-	agree.Size, agree.Position = UDim2.new(0.42, 0, 0, 34), UDim2.new(0.05, 0, 1, -52)
+	agree.Size, agree.Position = UDim2.new(0, 140, 0, 34), UDim2.new(0.5, -150, 1, -50)
 	agree.BackgroundColor3, agree.Text, agree.TextColor3 = Color3.fromRGB(40, 160, 80), "Agree", Color3.fromRGB(255, 255, 255)
-	agree.Font, agree.TextSize, agree.Parent = Enum.Font.GothamBold, 14, card
-	Instance.new("UICorner", agree).CornerRadius = UDim.new(0, 8)
+	agree.Font, agree.TextSize, agree.Parent = Enum.Font.GothamBold, 14, frame
+	Instance.new("UICorner", agree).CornerRadius = UDim.new(0, 6)
 	local disagree = Instance.new("TextButton")
-	disagree.Size, disagree.Position = UDim2.new(0.42, 0, 0, 34), UDim2.new(0.53, 0, 1, -52)
+	disagree.Size, disagree.Position = UDim2.new(0, 140, 0, 34), UDim2.new(0.5, 10, 1, -50)
 	disagree.BackgroundColor3, disagree.Text, disagree.TextColor3 = Color3.fromRGB(180, 50, 50), "Disagree", Color3.fromRGB(255, 255, 255)
-	disagree.Font, disagree.TextSize, disagree.Parent = Enum.Font.GothamBold, 14, card
-	Instance.new("UICorner", disagree).CornerRadius = UDim.new(0, 8)
+	disagree.Font, disagree.TextSize, disagree.Parent = Enum.Font.GothamBold, 14, frame
+	Instance.new("UICorner", disagree).CornerRadius = UDim.new(0, 6)
 	agree.MouseButton1Click:Connect(function() result = true end)
 	disagree.MouseButton1Click:Connect(function() result = false end)
-	while result == nil do task.wait(0.05) end
+	while result == nil do task.wait() end
 	gui:Destroy()
 	return result
 end
@@ -148,7 +115,7 @@ if not runTerms() then
 end
 
 local ok, src = pcall(function()
-	return game:HttpGet(BASE .. "UI/InsaneElevator")
+	return game:HttpGet(BASE .. "UI/InsaneElevator?t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(1,999999999)))
 end)
 if not ok or type(src) ~= "string" or src == "" then
 	warn("[ElevatorHub] failed to download UI/InsaneElevator")
@@ -158,4 +125,23 @@ local LS = loadstring or load
 local fn, err = LS(src)
 if not fn then warn("[ElevatorHub] compile: ", err) return end
 local ran, runErr = pcall(fn)
-if not ran then warn("[ElevatorHub] runtime: ", runErr) end
+if not ran then
+	warn("[ElevatorHub] runtime: ", runErr)
+	return
+end
+
+pcall(function()
+	local Event = game:GetService("ReplicatedStorage"):FindFirstChild("createTextNotification")
+	if not Event then return end
+	local msg = "<font color=\"#ffffff\">Script : </font><font color=\"#ff9e9e\"><b>made by cat_scripter</b></font>\n<font color=\"#ffb347\"><b>don't forget to subscribe</b></font>"
+	if typeof(firesignal) == "function" then
+		firesignal(Event.OnClientEvent, msg, 1)
+	elseif typeof(getconnections) == "function" then
+		for _, c in pairs(getconnections(Event.OnClientEvent)) do
+			pcall(function()
+				if c.Fire then c:Fire(msg, 1)
+				elseif c.Function then c.Function(msg, 1) end
+			end)
+		end
+	end
+end)
