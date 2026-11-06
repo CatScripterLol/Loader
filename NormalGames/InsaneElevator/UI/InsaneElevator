@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.4.5"
+local LOCAL_VERSION = "1.4.6"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 
 local ALLOWED_PLACE = 4104106043
@@ -60,6 +60,7 @@ Hub._floorHistory = {}
 Hub.antiAfk = false
 Hub.autoFarm = false
 Hub.farmSpeed = Hub.farmSpeed or 25
+Hub.farmMode = Hub.farmMode or "tween"
 Hub.lastFloorName = "Unknown"
 Hub.killerHighlights = {}
 Hub.elevHighlights = {}
@@ -477,12 +478,8 @@ RunService.Heartbeat:Connect(function()
 	if Hub.cleanVision then enforceCleanVision() end
 	if Hub.antiRadio then Hub.handleAntiRadio() end
 	local floor = Hub.predictFloor()
-	if floorLabel then
-		floorLabel.Text = "Floor: " .. tostring(floor)
-	end
-	if predLabel then
-		predLabel.Text = "Floor: " .. tostring(floor)
-	end
+	if floorLabel then floorLabel.Text = "Floor: " .. tostring(floor) end
+	if predLabel then predLabel.Text = "Floor: " .. tostring(floor) end
 	if Hub.godCheckerOn then
 		local users = Hub.getGodUsers()
 		if godLabel then
@@ -544,21 +541,42 @@ frame.BackgroundColor3, frame.BorderSizePixel, frame.Active, frame.Draggable = C
 frame.Parent = gui
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
 local title = Instance.new("TextLabel")
-title.Size, title.BackgroundTransparency = UDim2.new(1, -56, 0, 28), 1
+title.Size, title.BackgroundTransparency = UDim2.new(1, -84, 0, 28), 1
 title.Text, title.TextColor3, title.Font, title.TextSize = "Insane Elevator", Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold, 13
 title.TextXAlignment, title.Parent = Enum.TextXAlignment.Left, frame
 title.Position = UDim2.new(0, 10, 0, 0)
+local minimized = false
+local savedSize = frame.Size
 local close = Instance.new("TextButton")
 close.Size, close.Position = UDim2.new(0, 28, 0, 28), UDim2.new(1, -28, 0, 0)
 close.BackgroundColor3, close.Text, close.TextColor3 = Color3.fromRGB(190, 45, 45), "X", Color3.fromRGB(255, 255, 255)
 close.Font, close.TextSize, close.Parent = Enum.Font.GothamBold, 14, frame
 close.MouseButton1Click:Connect(function() gui.Enabled = false end)
+local mini = Instance.new("TextButton")
+mini.Size, mini.Position = UDim2.new(0, 28, 0, 28), UDim2.new(1, -56, 0, 0)
+mini.BackgroundColor3, mini.Text, mini.TextColor3 = Color3.fromRGB(55, 55, 75), "-", Color3.fromRGB(255, 255, 255)
+mini.Font, mini.TextSize, mini.Parent = Enum.Font.GothamBold, 16, frame
 local tabBar = Instance.new("Frame")
 tabBar.Size, tabBar.Position = UDim2.new(1, 0, 0, 28), UDim2.new(0, 0, 0, 28)
 tabBar.BackgroundColor3, tabBar.BorderSizePixel, tabBar.Parent = Color3.fromRGB(28, 28, 40), 0, frame
 local content = Instance.new("Frame")
 content.Size, content.Position = UDim2.new(1, 0, 1, -56), UDim2.new(0, 0, 0, 56)
 content.BackgroundTransparency, content.Parent = 1, frame
+mini.MouseButton1Click:Connect(function()
+	minimized = not minimized
+	if minimized then
+		savedSize = frame.Size
+		tabBar.Visible = false
+		content.Visible = false
+		frame.Size = UDim2.new(0, 230, 0, 28)
+		mini.Text = "+"
+	else
+		frame.Size = savedSize
+		tabBar.Visible = true
+		content.Visible = true
+		mini.Text = "-"
+	end
+end)
 local pages = {}
 local function makePage(name)
 	local p = Instance.new("Frame")
@@ -684,15 +702,17 @@ local function stopAutoFarm()
 	destroyPlatform()
 end
 local function clampSpeed(n)
-	return math.clamp(math.floor((tonumber(n) or 25) + 0.5), 25, 400)
+	local mode = Hub.farmMode or "tween"
+	local maxv = (mode == "tp") and 60 or 1000
+	return math.clamp(math.floor((tonumber(n) or (mode == "tp" and 10 or 25)) + 0.5), 1, maxv)
 end
 local FARM_Y = 1820
 local FARM_CX, FARM_CZ = 2, -3
-local FARM_HALF = 500
-local FARM_MIN_DIST = 120
+local FARM_HALF = 2500
+local FARM_MIN_DIST = 150
 local function randomFarmPos(fromPos)
 	local target
-	for _ = 1, 40 do
+	for _ = 1, 50 do
 		local x = FARM_CX + math.random(-FARM_HALF, FARM_HALF)
 		local z = FARM_CZ + math.random(-FARM_HALF, FARM_HALF)
 		target = Vector3.new(x, FARM_Y, z)
@@ -706,25 +726,36 @@ local function farmOnce()
 	ensurePlatform()
 	stopFarmTween()
 	local target = randomFarmPos(hrp.Position)
-	local speed = clampSpeed(Hub.farmSpeed)
-	Hub.farmSpeed = speed
-	local dist = (hrp.Position - target).Magnitude
-	local t = math.clamp(dist / math.max(speed, 1), 0.15, 90)
-	local tw = TweenService:Create(hrp, TweenInfo.new(t, Enum.EasingStyle.Linear), {CFrame = CFrame.new(target)})
-	Hub._farmTween = tw
-	local done = false
-	local c
-	c = tw.Completed:Connect(function()
-		done = true
-		if c then c:Disconnect() end
-	end)
-	tw:Play()
-	local t0 = tick()
-	while not done and Hub.autoFarm and farmRunning do
-		if not hrp.Parent or tick() - t0 > t + 2 then break end
-		task.wait(0.1)
+	local amount = clampSpeed(Hub.farmSpeed)
+	Hub.farmSpeed = amount
+	local mode = Hub.farmMode or "tween"
+	if mode == "tp" then
+		pcall(function()
+			local char = player.Character
+			if char and char.PrimaryPart then char:PivotTo(CFrame.new(target)) else hrp.CFrame = CFrame.new(target) end
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+		end)
+		task.wait(math.clamp(1 / math.max(amount, 1), 1 / 60, 2))
+	else
+		local dist = (hrp.Position - target).Magnitude
+		local t = math.clamp(dist / math.max(amount, 1), 0.12, 90)
+		local tw = TweenService:Create(hrp, TweenInfo.new(t, Enum.EasingStyle.Linear), {CFrame = CFrame.new(target)})
+		Hub._farmTween = tw
+		local done = false
+		local c
+		c = tw.Completed:Connect(function()
+			done = true
+			if c then c:Disconnect() end
+		end)
+		tw:Play()
+		local t0 = tick()
+		while not done and Hub.autoFarm and farmRunning do
+			if not hrp.Parent or tick() - t0 > t + 2 then break end
+			task.wait(0.1)
+		end
+		stopFarmTween()
 	end
-	stopFarmTween()
 end
 local function startAutoFarm()
 	if farmRunning then return end
@@ -751,23 +782,50 @@ local function setAntiAfk(on)
 	end
 end
 
-local a1 = makeBtn(farm, "Anti AFK: OFF", 0.05, COL_OFF)
+local speedBox, info
+local function refreshFarmUI()
+	local mode = Hub.farmMode or "tween"
+	if mode == "tp" then
+		speedBox.PlaceholderText = "1-60 TPs/s"
+		info.Text = "Mode TP  rate = TPs/s (max 60)\nRange 5000x5000  Y 1820"
+	else
+		speedBox.PlaceholderText = "1-1000 studs/s"
+		info.Text = "Mode Tween  speed = studs/s (max 1000)\nRange 5000x5000  Y 1820"
+	end
+	Hub.farmSpeed = clampSpeed(Hub.farmSpeed)
+	speedBox.Text = tostring(Hub.farmSpeed)
+end
+local a1 = makeBtn(farm, "Anti AFK: OFF", 0.03, COL_OFF)
 a1.MouseButton1Click:Connect(function() setAntiAfk(not Hub.antiAfk) toggleBtn(a1, Hub.antiAfk, "Anti AFK: ON", "Anti AFK: OFF") end)
-local a2 = makeBtn(farm, "Auto Farm Wins: OFF", 0.20, COL_OFF)
+local a2 = makeBtn(farm, "Auto Farm Wins: OFF", 0.15, COL_OFF)
 a2.MouseButton1Click:Connect(function()
 	if Hub.autoFarm then stopAutoFarm() else Hub.autoFarm = true startAutoFarm() end
 	toggleBtn(a2, Hub.autoFarm, "Auto Farm Wins: ON", "Auto Farm Wins: OFF")
 end)
-local speedBox = Instance.new("TextBox")
-speedBox.Size, speedBox.Position = UDim2.new(0.9, 0, 0, 28), UDim2.new(0.05, 0, 0.40, 0)
-speedBox.BackgroundColor3, speedBox.Text, speedBox.PlaceholderText = Color3.fromRGB(40, 40, 55), tostring(Hub.farmSpeed), "25-400"
+local modeBtn = makeBtn(farm, "Mode: Tween", 0.27, Color3.fromRGB(70, 110, 180))
+modeBtn.MouseButton1Click:Connect(function()
+	if Hub.farmMode == "tp" then
+		Hub.farmMode = "tween"
+		modeBtn.Text = "Mode: Tween"
+		modeBtn.BackgroundColor3 = Color3.fromRGB(70, 110, 180)
+	else
+		Hub.farmMode = "tp"
+		modeBtn.Text = "Mode: TP"
+		modeBtn.BackgroundColor3 = Color3.fromRGB(160, 100, 50)
+	end
+	refreshFarmUI()
+end)
+speedBox = Instance.new("TextBox")
+speedBox.Size, speedBox.Position = UDim2.new(0.9, 0, 0, 28), UDim2.new(0.05, 0, 0.42, 0)
+speedBox.BackgroundColor3, speedBox.Text, speedBox.PlaceholderText = Color3.fromRGB(40, 40, 55), tostring(Hub.farmSpeed), "1-1000 studs/s"
 speedBox.TextColor3, speedBox.Font, speedBox.TextSize, speedBox.Parent = Color3.fromRGB(255, 255, 255), Enum.Font.Gotham, 13, farm
 Instance.new("UICorner", speedBox).CornerRadius = UDim.new(0, 6)
 speedBox.FocusLost:Connect(function()
 	Hub.farmSpeed = clampSpeed(speedBox.Text)
 	speedBox.Text = tostring(Hub.farmSpeed)
 end)
-local info = Instance.new("TextLabel")
-info.Size, info.Position, info.BackgroundTransparency = UDim2.new(0.9, 0, 0, 40), UDim2.new(0.05, 0, 0.58, 0), 1
-info.Text, info.TextColor3, info.Font, info.TextSize = "Tween farm  1000x1000  min 120\nY 1820  speed = studs/sec", Color3.fromRGB(140, 145, 165), Enum.Font.Gotham, 11
+info = Instance.new("TextLabel")
+info.Size, info.Position, info.BackgroundTransparency = UDim2.new(0.9, 0, 0, 44), UDim2.new(0.05, 0, 0.58, 0), 1
+info.Text, info.TextColor3, info.Font, info.TextSize = "Mode Tween  speed = studs/s (max 1000)\nRange 5000x5000  Y 1820", Color3.fromRGB(140, 145, 165), Enum.Font.Gotham, 11
 info.TextXAlignment, info.Parent = Enum.TextXAlignment.Left, farm
+refreshFarmUI()
