@@ -2,7 +2,74 @@ local ALLOWED_PLACE = 4104106043
 if game.PlaceId ~= ALLOWED_PLACE then return end
 local url = "https://raw.githubusercontent.com/CatScripterLol/Loader/f4064ae4e9ef867d61c8e988c43956eb1eefa352/NormalGames/InsaneElevator/UI/InsaneElevator"
 local ok, src = pcall(function() return game:HttpGet(url) end)
-if not ok or type(src) ~= "string" or #src < 1000 then warn("[ElevatorHub] failed to load core") return end
+if not ok or type(src) ~= "string" or #src < 1000 then warn("[ElevatorHub] failed") return end
+-- patch anti slap after load
 local fn, err = loadstring(src)
-if not fn then warn("[ElevatorHub] compile error", err) return end
+if not fn then warn(err) return end
 fn()
+local Hub = ((typeof(getgenv)=="function" and getgenv()) or _G).ElevatorHub
+if not Hub then return end
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local function isSlapName(n)
+	local ln = string.lower(tostring(n or ""))
+	return string.find(ln, "slap", 1, true) ~= nil
+end
+local function stripForce(v, char)
+	if not Hub.antiSlap or not v then return end
+	local cn = v.ClassName
+	if cn == "BodyAngularVelocity" or cn == "LinearVelocity" or cn == "VectorForce"
+		or cn == "BodyForce" or cn == "BodyPosition" or cn == "AlignPosition"
+		or cn == "AlignOrientation" or cn == "AngularVelocity" or cn == "SeatWeld" then
+		pcall(function() v:Destroy() end)
+	elseif cn == "BodyVelocity" and v.Velocity ~= Vector3.zero then
+		pcall(function() v:Destroy() end)
+	elseif cn == "BodyGyro" then
+		local mt = v.MaxTorque
+		if mt ~= Vector3.new(8999999488, 8999999488, 8999999488) and v.D ~= 500 and v.D ~= 50 and v.P ~= 90000 then
+			pcall(function() v:Destroy() end)
+		end
+	end
+	if char then
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if hum then hum.Sit = false hum.PlatformStand = false end
+	end
+end
+function Hub.handleAntiSlap()
+	if not Hub.antiSlap then return end
+	local char = player.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	for _, v in pairs(char:GetDescendants()) do stripForce(v, char) end
+	if hrp and hrp.AssemblyLinearVelocity.Magnitude > 35 then
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+	end
+	if hum then
+		hum.Sit = false
+		hum.PlatformStand = false
+		local st = hum:GetState()
+		if st == Enum.HumanoidStateType.Physics or st == Enum.HumanoidStateType.Ragdoll
+			or st == Enum.HumanoidStateType.FallingDown or st == Enum.HumanoidStateType.Seated then
+			pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+		end
+	end
+	if Hub.removeSlapsFromEveryone then Hub.removeSlapsFromEveryone() end
+end
+local oldSet = Hub.setAntiSlap
+function Hub.setAntiSlap(on)
+	if oldSet then oldSet(on) end
+	Hub.antiSlap = on and true or false
+	if Hub._commSlapConn then pcall(function() Hub._commSlapConn:Disconnect() end) Hub._commSlapConn = nil end
+	if Hub._commSlapHB then pcall(function() Hub._commSlapHB:Disconnect() end) Hub._commSlapHB = nil end
+	if on and player.Character then
+		local char = player.Character
+		for _, v in pairs(char:GetDescendants()) do stripForce(v, char) end
+		Hub._commSlapConn = char.DescendantAdded:Connect(function(v) stripForce(v, char) end)
+		Hub._commSlapHB = RunService.Heartbeat:Connect(function()
+			if Hub.antiSlap then Hub.handleAntiSlap() end
+		end)
+	end
+end
