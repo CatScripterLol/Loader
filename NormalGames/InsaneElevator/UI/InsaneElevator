@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.4.8"
+local LOCAL_VERSION = "1.4.9"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 
 local ALLOWED_PLACE = 4104106043
@@ -53,6 +53,7 @@ Hub.mapESP = false
 Hub.playerESP = false
 Hub.cleanVision = false
 Hub.antiRadio = false
+Hub.antiSlap = false
 Hub.godCheckerOn = false
 Hub.predVisible = true
 Hub.predictedFloor = "..."
@@ -73,6 +74,8 @@ Hub._atmBackup = nil
 Hub._cleanConn = nil
 Hub._radioConn = nil
 Hub._radioPlayerConn = nil
+Hub._slapConn = nil
+Hub._hiddenSlaps = {}
 Hub._floorChildConn = nil
 Hub._mutedSounds = {}
 Hub._hiddenRadios = {}
@@ -304,6 +307,110 @@ function Hub.setAntiRadio(on)
 	end
 end
 
+local function isSlapName(n)
+	local ln = string.lower(tostring(n or ""))
+	return string.find(ln, "slap", 1, true) ~= nil
+		or string.find(ln, "glove", 1, true) ~= nil
+		or string.find(ln, "handslap", 1, true) ~= nil
+end
+
+function Hub.removeSlapsFromEveryone()
+	pcall(function()
+		if not Hub._hiddenSlaps then Hub._hiddenSlaps = {} end
+		local function hideTool(t)
+			if not t or not t.Parent then return end
+			if Hub._hiddenSlaps[t] then return end
+			Hub._hiddenSlaps[t] = t.Parent
+			t.Parent = nil
+		end
+		for _, plr in pairs(Players:GetPlayers()) do
+			local function wipe(parent)
+				if not parent then return end
+				for _, t in pairs(parent:GetChildren()) do
+					if (t:IsA("Tool") or t:IsA("HopperBin")) and isSlapName(t.Name) then hideTool(t) end
+				end
+			end
+			wipe(plr:FindFirstChild("Backpack"))
+			wipe(plr.Character)
+			wipe(plr:FindFirstChild("StarterGear"))
+		end
+		for _, v in pairs(workspace:GetDescendants()) do
+			if v:IsA("Tool") and isSlapName(v.Name) then hideTool(v) end
+		end
+	end)
+end
+
+function Hub.restoreSlaps()
+	pcall(function()
+		for tool, parent in pairs(Hub._hiddenSlaps or {}) do
+			if tool then
+				pcall(function()
+					if parent and parent.Parent then tool.Parent = parent
+					elseif player:FindFirstChild("Backpack") then tool.Parent = player.Backpack end
+				end)
+			end
+		end
+		table.clear(Hub._hiddenSlaps or {})
+	end)
+end
+
+function Hub.handleAntiSlap()
+	if not Hub.antiSlap then return end
+	Hub.removeSlapsFromEveryone()
+	pcall(function()
+		local char = player.Character
+		if not char then return end
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if hrp then
+			local v = hrp.AssemblyLinearVelocity
+			if v.Magnitude > 80 then
+				hrp.AssemblyLinearVelocity = Vector3.zero
+				hrp.AssemblyAngularVelocity = Vector3.zero
+			end
+			for _, x in pairs(hrp:GetChildren()) do
+				if x:IsA("BodyVelocity") or x:IsA("BodyForce") or x:IsA("BodyAngularVelocity")
+					or x:IsA("LinearVelocity") or x:IsA("VectorForce") or x:IsA("AngularVelocity") then
+					x:Destroy()
+				end
+			end
+		end
+		if hum then
+			if hum:GetState() == Enum.HumanoidStateType.Physics or hum:GetState() == Enum.HumanoidStateType.Ragdoll then
+				pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+			end
+		end
+	end)
+end
+
+function Hub.setAntiSlap(on)
+	Hub.antiSlap = on and true or false
+	if Hub._slapConn then pcall(function() Hub._slapConn:Disconnect() end) Hub._slapConn = nil end
+	if on then
+		Hub.removeSlapsFromEveryone()
+		Hub._slapConn = workspace.DescendantAdded:Connect(function(obj)
+			if not Hub.antiSlap then return end
+			task.defer(function()
+				if not obj or not obj.Parent then return end
+				if (obj:IsA("Tool") or obj:IsA("HopperBin")) and isSlapName(obj.Name) then
+					if not Hub._hiddenSlaps then Hub._hiddenSlaps = {} end
+					if not Hub._hiddenSlaps[obj] then
+						Hub._hiddenSlaps[obj] = obj.Parent
+						obj.Parent = nil
+					end
+				elseif obj:IsA("BodyVelocity") or obj:IsA("BodyForce") or obj:IsA("LinearVelocity") or obj:IsA("VectorForce") then
+					local p = obj.Parent
+					if p and player.Character and (p == player.Character:FindFirstChild("HumanoidRootPart") or p:IsDescendantOf(player.Character)) then
+						task.defer(function() pcall(function() obj:Destroy() end) end)
+					end
+				end
+			end)
+		end)
+	else
+		Hub.restoreSlaps()
+	end
+end
+
 local function enforceCleanVision()
 	if not Hub.cleanVision then return end
 	pcall(function()
@@ -532,6 +639,7 @@ RunService.Heartbeat:Connect(function()
 	lastTick = now
 	if Hub.cleanVision then enforceCleanVision() end
 	if Hub.antiRadio then Hub.handleAntiRadio() end
+	if Hub.antiSlap then Hub.handleAntiSlap() end
 	local floor = Hub.predictFloor()
 	if floorLabel then floorLabel.Text = "Floor: " .. tostring(floor) end
 	if predLabel then predLabel.Text = "Floor: " .. tostring(floor) end
@@ -718,20 +826,22 @@ end)
 
 local m1 = makeBtn(misc, "Clean Vision: OFF", 0.05, COL_OFF)
 m1.MouseButton1Click:Connect(function() Hub.setCleanVision(not Hub.cleanVision) toggleBtn(m1, Hub.cleanVision, "Clean Vision: ON", "Clean Vision: OFF") end)
-local m2 = makeBtn(misc, "Anti Radio: OFF", 0.18, COL_OFF)
+local m2 = makeBtn(misc, "Anti Radio: OFF", 0.14, COL_OFF)
 m2.MouseButton1Click:Connect(function() Hub.setAntiRadio(not Hub.antiRadio) toggleBtn(m2, Hub.antiRadio, "Anti Radio: ON", "Anti Radio: OFF") end)
-local m3 = makeBtn(misc, "God Mode Detector: OFF", 0.31, COL_OFF)
+local mSlap = makeBtn(misc, "Anti Slap: OFF", 0.27, COL_OFF)
+mSlap.MouseButton1Click:Connect(function() Hub.setAntiSlap(not Hub.antiSlap) toggleBtn(mSlap, Hub.antiSlap, "Anti Slap: ON", "Anti Slap: OFF") end)
+local m3 = makeBtn(misc, "God Mode Detector: OFF", 0.40, COL_OFF)
 m3.MouseButton1Click:Connect(function() Hub.godCheckerOn = not Hub.godCheckerOn toggleBtn(m3, Hub.godCheckerOn, "God Mode Detector: ON", "God Mode Detector: OFF") end)
 
 godLabel = Instance.new("TextLabel")
-godLabel.Size, godLabel.Position = UDim2.new(0.9, 0, 0, 48), UDim2.new(0.05, 0, 0.48, 0)
+godLabel.Size, godLabel.Position = UDim2.new(0.9, 0, 0, 40), UDim2.new(0.05, 0, 0.55, 0)
 godLabel.BackgroundTransparency, godLabel.Text = 1, "God Mode Detector: off"
 godLabel.TextColor3, godLabel.Font, godLabel.TextSize = Color3.fromRGB(200, 180, 120), Enum.Font.Gotham, 11
 godLabel.TextXAlignment, godLabel.TextYAlignment = Enum.TextXAlignment.Left, Enum.TextYAlignment.Top
 godLabel.TextWrapped, godLabel.Parent = true, misc
 
 predLabel = Instance.new("TextLabel")
-predLabel.Size, predLabel.Position = UDim2.new(0.9, 0, 0, 28), UDim2.new(0.05, 0, 0.72, 0)
+predLabel.Size, predLabel.Position = UDim2.new(0.9, 0, 0, 28), UDim2.new(0.05, 0, 0.78, 0)
 predLabel.BackgroundTransparency, predLabel.Text = 1, "Floor: ..."
 predLabel.TextColor3, predLabel.Font, predLabel.TextSize = Color3.fromRGB(120, 200, 255), Enum.Font.Gotham, 12
 predLabel.TextXAlignment, predLabel.TextYAlignment = Enum.TextXAlignment.Left, Enum.TextYAlignment.Top
