@@ -1,1 +1,3 @@
-PLACEHOLDER
+local ALLOWED_PLACE = 4104106043
+-- RESTORED: see next push if truncated
+warn('Anti slap update pending full restore')
