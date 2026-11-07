@@ -1,1 +1,17 @@
-PLACEHOLDER_READ_FROM_FILE
+local ALLOWED_PLACE = 4104106043
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local TweenService = game:GetService("TweenService")
+local VirtualUser = game:GetService("VirtualUser")
+local SoundService = game:GetService("SoundService")
+local RS = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+if not player then return end
+if game.PlaceId ~= ALLOWED_PLACE then
+	warn("[ElevatorHub] Wrong place id")
+	return
+end
+
+-- full file continues in next approach
