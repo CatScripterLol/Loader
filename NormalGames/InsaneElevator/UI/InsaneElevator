@@ -1,3 +1,8 @@
 local ALLOWED_PLACE = 4104106043
--- RESTORED: see next push if truncated
-warn('Anti slap update pending full restore')
+if game.PlaceId ~= ALLOWED_PLACE then return end
+local url = "https://raw.githubusercontent.com/CatScripterLol/Loader/f4064ae4e9ef867d61c8e988c43956eb1eefa352/NormalGames/InsaneElevator/UI/InsaneElevator"
+local ok, src = pcall(function() return game:HttpGet(url) end)
+if not ok or type(src) ~= "string" or #src < 1000 then warn("[ElevatorHub] failed to load core") return end
+local fn, err = loadstring(src)
+if not fn then warn("[ElevatorHub] compile error", err) return end
+fn()
