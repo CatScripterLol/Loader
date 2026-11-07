@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.4.7"
+local LOCAL_VERSION = "1.4.8"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 
 local ALLOWED_PLACE = 4104106043
@@ -140,29 +140,33 @@ function Hub.isKiller(model)
 	if Players:GetPlayerFromCharacter(model) then return false end
 	if Players:FindFirstChild(model.Name) then return false end
 	local n = string.lower(model.Name)
+	local exclude = {
+		"elevator","lobby","shop","spawn","camera","baseplate","dummy","rig",
+		"mannequin","statue","display","preview","template","clone","hitbox",
+	}
+	for _, e in ipairs(exclude) do
+		if string.find(n, e, 1, true) then return false end
+	end
 	local keys = {
-		"killer","enemy","npc","boss","monster","entity","ai","scp","granny","piggy",
-		"baldi","jeff","slender","siren","john","doe","among","alien","cartoon","penny",
-		"puppet","lexi","terminator","trex","t-rex","1x1","endo","ben","lake","foxy",
-		"freddy","chica","bonnie","springtrap","nightmare","horror","mob","threat",
-		"ghost","demon","zombie","wendigo","chucky","annabelle","pennywise",
-		"smile","mimic","backrooms","hunter","stalker",
+		"killer","enemy","boss","monster","entity","scp","granny","piggy",
+		"baldi","jeff","slender","siren","john doe","johndoe","among us","alien",
+		"cartoon cat","pennywise","puppet","lexi","terminator","trex","t-rex",
+		"1x1x1x1","endoskeleton","ben ","lake ","foxy","freddy","chica","bonnie",
+		"springtrap","nightmare","horror","threat","ghost","demon","zombie",
+		"wendigo","chucky","annabelle","mimic","backrooms","hunter","stalker",
+		"ao oni","aooni","nextbot","sanic","speed demon","cartoon dog",
 	}
 	for _, k in ipairs(keys) do
 		if string.find(n, k, 1, true) then return true end
 	end
-	local hum = model:FindFirstChildOfClass("Humanoid")
-	if hum then
-		local parent = model.Parent
-		if parent then
-			local pn = string.lower(parent.Name)
-			if string.find(pn, "killer") or string.find(pn, "enemy") or string.find(pn, "npc")
-				or string.find(pn, "floor") or string.find(pn, "map") or string.find(pn, "mobs") then
+	local parent = model.Parent
+	if parent then
+		local pn = string.lower(parent.Name)
+		if string.find(pn, "killer") or string.find(pn, "enemy") or string.find(pn, "mobs")
+			or string.find(pn, "threat") or string.find(pn, "bosses") then
+			if model:FindFirstChildOfClass("Humanoid") or model:FindFirstChildWhichIsA("BasePart") then
 				return true
 			end
-		end
-		if not Players:GetPlayerFromCharacter(model) then
-			return true
 		end
 	end
 	return false
@@ -455,7 +459,7 @@ function Hub.scanFloor()
 						if v:FindFirstChildOfClass("Humanoid") or v:FindFirstChild("Map") or v:FindFirstChild("Floor") or v:FindFirstChildWhichIsA("BasePart")
 							or string.find(ln, "floor") or string.find(ln, "killer") or string.find(ln, "boss") or string.find(ln, "scp") or string.find(ln, "entity") then
 							result = n
-					end
+						end
 					end
 				end
 			end
@@ -550,30 +554,14 @@ RunService.Heartbeat:Connect(function()
 		Hub.clearHighlights(Hub.killerHighlights)
 		local seen = {}
 		local function tryMark(m)
-			if not m or seen[m] then return end
+			if not m or seen[m] or not m:IsA("Model") then return end
 			if Hub.isKiller(m) then
 				seen[m] = true
 				Hub.applyHighlight(m, Color3.fromRGB(255, 40, 40), Hub.killerHighlights)
 			end
 		end
-		for _, v in pairs(workspace:GetChildren()) do
-			if v:IsA("Model") then tryMark(v) end
-			if v:IsA("Model") or v:IsA("Folder") then
-				for _, c in pairs(v:GetChildren()) do
-					if c:IsA("Model") then tryMark(c) end
-					if c:IsA("Model") or c:IsA("Folder") then
-						for _, c2 in pairs(c:GetChildren()) do
-							if c2:IsA("Model") then tryMark(c2) end
-						end
-					end
-				end
-			end
-		end
 		for _, v in pairs(workspace:GetDescendants()) do
-			if v:IsA("Humanoid") then
-				local m = v.Parent
-				if m and m:IsA("Model") then tryMark(m) end
-			end
+			if v:IsA("Model") then tryMark(v) end
 		end
 	else Hub.clearHighlights(Hub.killerHighlights) end
 	if Hub.elevESP then
