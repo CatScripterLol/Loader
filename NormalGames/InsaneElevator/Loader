@@ -1,6 +1,5 @@
 local ALLOWED_PLACE = 4104106043
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 if not player then return end
 if game.PlaceId ~= ALLOWED_PLACE then
@@ -9,121 +8,22 @@ if game.PlaceId ~= ALLOWED_PLACE then
 end
 
 local BASE = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/"
-local pg = player:WaitForChild("PlayerGui")
-
-local function runLoading()
-	if pg:FindFirstChild("ElevatorLoading") then pg.ElevatorLoading:Destroy() end
-	local gui = Instance.new("ScreenGui")
-	gui.Name, gui.ResetOnSpawn, gui.IgnoreGuiInset, gui.DisplayOrder = "ElevatorLoading", false, true, 10000
-	gui.Parent = pg
-	local frame = Instance.new("Frame")
-	frame.Size, frame.Position = UDim2.new(1, 0, 1, 0), UDim2.new(1, 0, 0, 0)
-	frame.BackgroundColor3, frame.BorderSizePixel, frame.Parent = Color3.fromRGB(12, 12, 18), 0, gui
-	local title = Instance.new("TextLabel")
-	title.Size, title.Position = UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0.42, 0)
-	title.BackgroundTransparency, title.Text = 1, "ElevatorHub"
-	title.TextColor3, title.Font, title.TextSize = Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold, 28
-	title.Parent = frame
-	local sub = Instance.new("TextLabel")
-	sub.Size, sub.Position = UDim2.new(1, 0, 0, 24), UDim2.new(0, 0, 0.42, 40)
-	sub.BackgroundTransparency, sub.Text = 1, "Loading..."
-	sub.TextColor3, sub.Font, sub.TextSize = Color3.fromRGB(160, 165, 190), Enum.Font.Gotham, 14
-	sub.Parent = frame
-	local barBg = Instance.new("Frame")
-	barBg.Size, barBg.Position = UDim2.new(0.4, 0, 0, 6), UDim2.new(0.3, 0, 0.55, 0)
-	barBg.BackgroundColor3, barBg.BorderSizePixel, barBg.Parent = Color3.fromRGB(35, 35, 48), 0, frame
-	Instance.new("UICorner", barBg).CornerRadius = UDim.new(0, 3)
-	local bar = Instance.new("Frame")
-	bar.Size, bar.BackgroundColor3, bar.BorderSizePixel, bar.Parent = UDim2.new(0, 0, 1, 0), Color3.fromRGB(90, 140, 255), 0, barBg
-	Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 3)
-	local pct = Instance.new("TextLabel")
-	pct.Size, pct.Position = UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0.55, 14)
-	pct.BackgroundTransparency, pct.Text = 1, "0%"
-	pct.TextColor3, pct.Font, pct.TextSize = Color3.fromRGB(200, 200, 220), Enum.Font.Gotham, 13
-	pct.Parent = frame
-	local skip = Instance.new("TextButton")
-	skip.Size, skip.Position = UDim2.new(0, 80, 0, 28), UDim2.new(0.5, -40, 0.62, 0)
-	skip.BackgroundColor3, skip.Text, skip.TextColor3 = Color3.fromRGB(50, 50, 70), "Skip", Color3.fromRGB(255, 255, 255)
-	skip.Font, skip.TextSize, skip.Visible, skip.Parent = Enum.Font.GothamBold, 13, false, frame
-	Instance.new("UICorner", skip).CornerRadius = UDim.new(0, 6)
-	local done, skipped = false, false
-	skip.MouseButton1Click:Connect(function()
-		if bar.Size.X.Scale < 0.4 then return end
-		skipped = true
-	end)
-	TweenService:Create(frame, TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}):Play()
-	local duration = 2 + math.random() * 1
-	local t0 = tick()
-	while not done and not skipped do
-		local a = math.clamp((tick() - t0) / duration, 0, 1)
-		local ease = a * a * (3 - 2 * a)
-		bar.Size = UDim2.new(ease, 0, 1, 0)
-		pct.Text = tostring(math.floor(ease * 100)) .. "%"
-		skip.Visible = ease >= 0.4
-		if a >= 1 then done = true end
-		task.wait(0.03)
-	end
-	bar.Size = UDim2.new(1, 0, 1, 0)
-	pct.Text = "100%"
-	local out = TweenService:Create(frame, TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {Position = UDim2.new(-1, 0, 0, 0)})
-	out:Play()
-	out.Completed:Wait()
-	gui:Destroy()
-end
-
-local function runTerms()
-	if pg:FindFirstChild("ElevatorTerms") then pg.ElevatorTerms:Destroy() end
-	local gui = Instance.new("ScreenGui")
-	gui.Name, gui.ResetOnSpawn, gui.IgnoreGuiInset, gui.DisplayOrder = "ElevatorTerms", false, true, 10001
-	gui.Parent = pg
-	local frame = Instance.new("Frame")
-	frame.Size, frame.Position = UDim2.new(0, 360, 0, 280), UDim2.new(0.5, -180, 0.5, -140)
-	frame.BackgroundColor3, frame.BorderSizePixel, frame.Parent = Color3.fromRGB(22, 22, 32), 0, gui
-	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
-	local title = Instance.new("TextLabel")
-	title.Size, title.BackgroundTransparency = UDim2.new(1, 0, 0, 36), 1
-	title.Text, title.TextColor3, title.Font, title.TextSize = "Terms of Use", Color3.fromRGB(255, 255, 255), Enum.Font.GothamBold, 18
-	title.Parent = frame
-	local body = Instance.new("TextLabel")
-	body.Size, body.Position = UDim2.new(1, -24, 0, 150), UDim2.new(0, 12, 0, 40)
-	body.BackgroundTransparency, body.TextWrapped = 1, true
-	body.TextXAlignment, body.TextYAlignment = Enum.TextXAlignment.Left, Enum.TextYAlignment.Top
-	body.Text = "We are not responsible for bans, win streak loss, account warnings, or any other punishment from Roblox or the game.\n\nThis script is provided as-is. Use at your own risk.\n\nBy clicking Agree you accept these terms. You must accept every time you run this script.\n\nDisagree will kick you and the script will not load."
-	body.TextColor3, body.Font, body.TextSize, body.Parent = Color3.fromRGB(180, 185, 200), Enum.Font.Gotham, 13, frame
-	local result = nil
-	local agree = Instance.new("TextButton")
-	agree.Size, agree.Position = UDim2.new(0, 140, 0, 34), UDim2.new(0.5, -150, 1, -50)
-	agree.BackgroundColor3, agree.Text, agree.TextColor3 = Color3.fromRGB(40, 160, 80), "Agree", Color3.fromRGB(255, 255, 255)
-	agree.Font, agree.TextSize, agree.Parent = Enum.Font.GothamBold, 14, frame
-	Instance.new("UICorner", agree).CornerRadius = UDim.new(0, 6)
-	local disagree = Instance.new("TextButton")
-	disagree.Size, disagree.Position = UDim2.new(0, 140, 0, 34), UDim2.new(0.5, 10, 1, -50)
-	disagree.BackgroundColor3, disagree.Text, disagree.TextColor3 = Color3.fromRGB(180, 50, 50), "Disagree", Color3.fromRGB(255, 255, 255)
-	disagree.Font, disagree.TextSize, disagree.Parent = Enum.Font.GothamBold, 14, frame
-	Instance.new("UICorner", disagree).CornerRadius = UDim.new(0, 6)
-	agree.MouseButton1Click:Connect(function() result = true end)
-	disagree.MouseButton1Click:Connect(function() result = false end)
-	while result == nil do task.wait() end
-	gui:Destroy()
-	return result
-end
-
-if not runTerms() then
-	pcall(function() player:Kick("You clicked Disagree, so you will not be able to use this script.") end)
-	return
-end
-runLoading()
 
 local ok, src = pcall(function()
-	return game:HttpGet(BASE .. "UI/InsaneElevator?t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(1,999999999)))
+	return game:HttpGet(BASE .. "UI/InsaneElevator?t=" .. tostring(tick()) .. "&r=" .. tostring(math.random(1, 999999999)))
 end)
 if not ok or type(src) ~= "string" or src == "" then
 	warn("[ElevatorHub] failed to download UI/InsaneElevator")
 	return
 end
+
 local LS = loadstring or load
 local fn, err = LS(src)
-if not fn then warn("[ElevatorHub] compile: ", err) return end
+if not fn then
+	warn("[ElevatorHub] compile: ", err)
+	return
+end
+
 local ran, runErr = pcall(fn)
 if not ran then
 	warn("[ElevatorHub] runtime: ", runErr)
