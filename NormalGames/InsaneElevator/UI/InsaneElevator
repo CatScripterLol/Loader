@@ -49,6 +49,7 @@ Hub._cleanConn = nil
 Hub._radioConn = nil
 Hub._radioPlayerConn = nil
 Hub._slapConn = nil
+Hub._slapStepped = nil
 Hub._slapPlayerHooks = {}
 Hub._slapCharConn = nil
 Hub._hiddenSlaps = {}
@@ -285,31 +286,56 @@ end
 
 local function isSlapName(n)
 	local ln = string.lower(tostring(n or ""))
-	return ln == "slap hand" or ln == "slaphand" or string.find(ln, "slap hand", 1, true) ~= nil
+	return ln == "slap hand" or ln == "slaphand"
+		or string.find(ln, "slap hand", 1, true) ~= nil
+		or string.find(ln, "slaphand", 1, true) ~= nil
+end
+
+local function hideSlapTool(t)
+	if not t or not t.Parent then return end
+	if not Hub._hiddenSlaps then Hub._hiddenSlaps = {} end
+	if Hub._hiddenSlaps[t] then
+		if t.Parent ~= nil then t.Parent = nil end
+		return
+	end
+	Hub._hiddenSlaps[t] = t.Parent
+	pcall(function()
+		if t:IsA("Tool") then
+			pcall(function() t:Deactivate() end)
+			pcall(function() t.Enabled = false end)
+		end
+		t.Parent = nil
+	end)
 end
 
 function Hub.removeSlapsFromEveryone()
 	pcall(function()
 		if not Hub._hiddenSlaps then Hub._hiddenSlaps = {} end
-		local function hideTool(t)
-			if not t or not t.Parent then return end
-			if Hub._hiddenSlaps[t] then return end
-			Hub._hiddenSlaps[t] = t.Parent
-			t.Parent = nil
-		end
 		for _, plr in pairs(Players:GetPlayers()) do
 			local function wipe(parent)
 				if not parent then return end
 				for _, t in pairs(parent:GetChildren()) do
-					if (t:IsA("Tool") or t:IsA("HopperBin")) and isSlapName(t.Name) then hideTool(t) end
+					if (t:IsA("Tool") or t:IsA("HopperBin")) and isSlapName(t.Name) then
+						hideSlapTool(t)
+					end
 				end
 			end
 			wipe(plr:FindFirstChild("Backpack"))
 			wipe(plr.Character)
 			wipe(plr:FindFirstChild("StarterGear"))
+			local char = plr.Character
+			if char then
+				for _, d in pairs(char:GetDescendants()) do
+					if (d:IsA("Tool") or d:IsA("HopperBin")) and isSlapName(d.Name) then
+						hideSlapTool(d)
+					end
+				end
+			end
 		end
 		for _, v in pairs(workspace:GetDescendants()) do
-			if v:IsA("Tool") and isSlapName(v.Name) then hideTool(v) end
+			if (v:IsA("Tool") or v:IsA("HopperBin")) and isSlapName(v.Name) then
+				hideSlapTool(v)
+			end
 		end
 	end)
 end
@@ -319,8 +345,14 @@ function Hub.restoreSlaps()
 		for tool, parent in pairs(Hub._hiddenSlaps or {}) do
 			if tool then
 				pcall(function()
-					if parent and parent.Parent then tool.Parent = parent
-					elseif player:FindFirstChild("Backpack") then tool.Parent = player.Backpack end
+					if tool:IsA("Tool") then
+						pcall(function() tool.Enabled = true end)
+					end
+					if parent and parent.Parent then
+						tool.Parent = parent
+					elseif player:FindFirstChild("Backpack") then
+						tool.Parent = player.Backpack
+					end
 				end)
 			end
 		end
@@ -337,42 +369,59 @@ function Hub.handleAntiSlap()
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		local hrp = char:FindFirstChild("HumanoidRootPart")
 		if not hum then return end
+
 		hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
 		hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
 		hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
 		hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+		hum:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
 		hum.Sit = false
+		hum.PlatformStand = false
+
 		if hum.SeatPart then
-			pcall(function() hum.SeatPart:Sit(nil) end)
-		end
-		for _, w in pairs(char:GetDescendants()) do
-			if w:IsA("Weld") or w:IsA("WeldConstraint") or w.ClassName == "SeatWeld" then
-				local n = string.lower(w.Name)
-				if string.find(n, "seat", 1, true) or w.ClassName == "SeatWeld" then
-					pcall(function() w:Destroy() end)
+			pcall(function()
+				local seat = hum.SeatPart
+				hum.Sit = false
+				if seat and seat:IsA("Seat") then
+					seat.Disabled = true
+					task.defer(function() pcall(function() seat.Disabled = false end) end)
 				end
+			end)
+		end
+
+		for _, w in pairs(char:GetDescendants()) do
+			local cn = w.ClassName
+			if cn == "SeatWeld" or (w:IsA("Weld") and string.find(string.lower(w.Name), "seat", 1, true)) then
+				pcall(function() w:Destroy() end)
 			end
 		end
 		if hrp then
 			for _, x in pairs(hrp:GetChildren()) do
-				if x:IsA("Weld") or x:IsA("WeldConstraint") or x.ClassName == "SeatWeld" then
+				if x.ClassName == "SeatWeld" or x:IsA("BodyVelocity") or x:IsA("BodyForce")
+					or x:IsA("LinearVelocity") or x:IsA("VectorForce") or x:IsA("BodyAngularVelocity") then
 					pcall(function() x:Destroy() end)
 				end
 			end
+			local v = hrp.AssemblyLinearVelocity
+			if v.Magnitude > 60 then
+				hrp.AssemblyLinearVelocity = Vector3.new(0, math.min(v.Y, 0), 0)
+				hrp.AssemblyAngularVelocity = Vector3.zero
+			end
 		end
+
 		local st = hum:GetState()
 		if st == Enum.HumanoidStateType.Seated
 			or st == Enum.HumanoidStateType.Physics
 			or st == Enum.HumanoidStateType.Ragdoll
-			or st == Enum.HumanoidStateType.FallingDown then
+			or st == Enum.HumanoidStateType.FallingDown
+			or st == Enum.HumanoidStateType.PlatformStanding then
 			pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
 			pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
 		end
+
 		for _, t in pairs(char:GetChildren()) do
 			if (t:IsA("Tool") or t:IsA("HopperBin")) and isSlapName(t.Name) then
-				if not Hub._hiddenSlaps then Hub._hiddenSlaps = {} end
-				if not Hub._hiddenSlaps[t] then Hub._hiddenSlaps[t] = player:FindFirstChild("Backpack") or t.Parent end
-				t.Parent = nil
+				hideSlapTool(t)
 			end
 		end
 	end)
@@ -381,6 +430,7 @@ end
 function Hub.setAntiSlap(on)
 	Hub.antiSlap = on and true or false
 	if Hub._slapConn then pcall(function() Hub._slapConn:Disconnect() end) Hub._slapConn = nil end
+	if Hub._slapStepped then pcall(function() Hub._slapStepped:Disconnect() end) Hub._slapStepped = nil end
 	if Hub._slapPlayerHooks then
 		for _, c in pairs(Hub._slapPlayerHooks) do pcall(function() c:Disconnect() end) end
 	end
@@ -390,16 +440,15 @@ function Hub.setAntiSlap(on)
 		local function hideIfSlap(obj)
 			if not Hub.antiSlap or not obj then return end
 			if (obj:IsA("Tool") or obj:IsA("HopperBin")) and isSlapName(obj.Name) then
-				if not Hub._hiddenSlaps then Hub._hiddenSlaps = {} end
-				if not Hub._hiddenSlaps[obj] then
-					Hub._hiddenSlaps[obj] = obj.Parent
-					obj.Parent = nil
-				end
+				hideSlapTool(obj)
 			end
 		end
 		Hub._slapConn = workspace.DescendantAdded:Connect(function(obj)
 			if not Hub.antiSlap then return end
 			task.defer(function() hideIfSlap(obj) end)
+		end)
+		Hub._slapStepped = RunService.RenderStepped:Connect(function()
+			if Hub.antiSlap then Hub.handleAntiSlap() end
 		end)
 		local function hookPlayer(plr)
 			local function hookCont(cont)
@@ -410,10 +459,30 @@ function Hub.setAntiSlap(on)
 				table.insert(Hub._slapPlayerHooks, c)
 			end
 			hookCont(plr:FindFirstChild("Backpack"))
-			if plr.Character then hookCont(plr.Character) end
+			if plr.Character then
+				hookCont(plr.Character)
+				for _, t in pairs(plr.Character:GetChildren()) do
+					if t:IsA("Tool") then
+						local eq = t.Equipped:Connect(function()
+							if Hub.antiSlap and isSlapName(t.Name) then hideSlapTool(t) end
+						end)
+						table.insert(Hub._slapPlayerHooks, eq)
+					end
+				end
+			end
 			local ca = plr.CharacterAdded:Connect(function(char)
 				hookCont(char)
 				if Hub.antiSlap then Hub.removeSlapsFromEveryone() end
+				char.ChildAdded:Connect(function(ch)
+					task.defer(function()
+						hideIfSlap(ch)
+						if ch:IsA("Tool") then
+							ch.Equipped:Connect(function()
+								if Hub.antiSlap and isSlapName(ch.Name) then hideSlapTool(ch) end
+							end)
+						end
+					end)
+				end)
 			end)
 			table.insert(Hub._slapPlayerHooks, ca)
 		end
@@ -429,6 +498,7 @@ function Hub.setAntiSlap(on)
 				hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
 				hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
 				hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+				hum:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
 			end
 		end)
 		if not Hub._slapCharConn then
@@ -440,6 +510,7 @@ function Hub.setAntiSlap(on)
 						hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
 						hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
 						hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+						hum:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
 					end
 				end)
 			end)
@@ -453,6 +524,7 @@ function Hub.setAntiSlap(on)
 				hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
 				hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
 				hum:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+				hum:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, true)
 			end
 		end)
 	end
@@ -680,17 +752,13 @@ end
 local godLabel, floorLabel, predLabel
 
 local lastTick = 0
-local lastSlapTick = 0
 RunService.Heartbeat:Connect(function()
 	local now = tick()
-	if Hub.antiSlap and now - lastSlapTick >= 0.08 then
-		lastSlapTick = now
-		Hub.handleAntiSlap()
-	end
 	if now - lastTick < perfInterval() then return end
 	lastTick = now
 	if Hub.cleanVision then enforceCleanVision() end
 	if Hub.antiRadio then Hub.handleAntiRadio() end
+	if Hub.antiSlap then Hub.handleAntiSlap() end
 	local floor = Hub.predictFloor()
 	if floorLabel then floorLabel.Text = "Floor: " .. tostring(floor) end
 	if predLabel then predLabel.Text = "Floor: " .. tostring(floor) end
