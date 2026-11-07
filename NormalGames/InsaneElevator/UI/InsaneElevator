@@ -1,4 +1,4 @@
-local LOCAL_VERSION = "1.4.9"
+local LOCAL_VERSION = "1.5.0"
 local VERSION_URL = "https://raw.githubusercontent.com/CatScripterLol/Loader/main/NormalGames/InsaneElevator/VERSION"
 
 local ALLOWED_PLACE = 4104106043
@@ -75,6 +75,8 @@ Hub._cleanConn = nil
 Hub._radioConn = nil
 Hub._radioPlayerConn = nil
 Hub._slapConn = nil
+Hub._slapPlayerHooks = {}
+Hub._slapCharConn = nil
 Hub._hiddenSlaps = {}
 Hub._floorChildConn = nil
 Hub._mutedSounds = {}
@@ -309,9 +311,7 @@ end
 
 local function isSlapName(n)
 	local ln = string.lower(tostring(n or ""))
-	return string.find(ln, "slap", 1, true) ~= nil
-		or string.find(ln, "glove", 1, true) ~= nil
-		or string.find(ln, "handslap", 1, true) ~= nil
+	return ln == "slap hand" or ln == "slaphand" or string.find(ln, "slap hand", 1, true) ~= nil
 end
 
 function Hub.removeSlapsFromEveryone()
@@ -360,54 +360,103 @@ function Hub.handleAntiSlap()
 	pcall(function()
 		local char = player.Character
 		if not char then return end
-		local hrp = char:FindFirstChild("HumanoidRootPart")
 		local hum = char:FindFirstChildOfClass("Humanoid")
-		if hrp then
-			local v = hrp.AssemblyLinearVelocity
-			if v.Magnitude > 80 then
-				hrp.AssemblyLinearVelocity = Vector3.zero
-				hrp.AssemblyAngularVelocity = Vector3.zero
-			end
-			for _, x in pairs(hrp:GetChildren()) do
-				if x:IsA("BodyVelocity") or x:IsA("BodyForce") or x:IsA("BodyAngularVelocity")
-					or x:IsA("LinearVelocity") or x:IsA("VectorForce") or x:IsA("AngularVelocity") then
-					x:Destroy()
-				end
-			end
+		if not hum then return end
+		pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false) end)
+		pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false) end)
+		pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false) end)
+		pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false) end)
+		local st = hum:GetState()
+		if st == Enum.HumanoidStateType.Seated then
+			pcall(function()
+				hum.Sit = false
+				hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			end)
+		elseif st == Enum.HumanoidStateType.Physics or st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.FallingDown then
+			pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+			pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
 		end
-		if hum then
-			if hum:GetState() == Enum.HumanoidStateType.Physics or hum:GetState() == Enum.HumanoidStateType.Ragdoll then
-				pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
-			end
-		end
+		if hum.Sit then hum.Sit = false end
 	end)
 end
 
 function Hub.setAntiSlap(on)
 	Hub.antiSlap = on and true or false
 	if Hub._slapConn then pcall(function() Hub._slapConn:Disconnect() end) Hub._slapConn = nil end
+	if Hub._slapPlayerHooks then
+		for _, c in pairs(Hub._slapPlayerHooks) do pcall(function() c:Disconnect() end) end
+	end
+	Hub._slapPlayerHooks = {}
 	if on then
 		Hub.removeSlapsFromEveryone()
+		local function hideIfSlap(obj)
+			if not Hub.antiSlap or not obj then return end
+			if (obj:IsA("Tool") or obj:IsA("HopperBin")) and isSlapName(obj.Name) then
+				if not Hub._hiddenSlaps then Hub._hiddenSlaps = {} end
+				if not Hub._hiddenSlaps[obj] then
+					Hub._hiddenSlaps[obj] = obj.Parent
+					obj.Parent = nil
+				end
+			end
+		end
 		Hub._slapConn = workspace.DescendantAdded:Connect(function(obj)
 			if not Hub.antiSlap then return end
-			task.defer(function()
-				if not obj or not obj.Parent then return end
-				if (obj:IsA("Tool") or obj:IsA("HopperBin")) and isSlapName(obj.Name) then
-					if not Hub._hiddenSlaps then Hub._hiddenSlaps = {} end
-					if not Hub._hiddenSlaps[obj] then
-						Hub._hiddenSlaps[obj] = obj.Parent
-						obj.Parent = nil
-					end
-				elseif obj:IsA("BodyVelocity") or obj:IsA("BodyForce") or obj:IsA("LinearVelocity") or obj:IsA("VectorForce") then
-					local p = obj.Parent
-					if p and player.Character and (p == player.Character:FindFirstChild("HumanoidRootPart") or p:IsDescendantOf(player.Character)) then
-						task.defer(function() pcall(function() obj:Destroy() end) end)
-					end
-				end
-			end)
+			task.defer(function() hideIfSlap(obj) end)
 		end)
+		local function hookPlayer(plr)
+			local function hookCont(cont)
+				if not cont then return end
+				local c = cont.ChildAdded:Connect(function(ch)
+					task.defer(function() hideIfSlap(ch) end)
+				end)
+				table.insert(Hub._slapPlayerHooks, c)
+			end
+			hookCont(plr:FindFirstChild("Backpack"))
+			if plr.Character then hookCont(plr.Character) end
+			local ca = plr.CharacterAdded:Connect(function(char)
+				hookCont(char)
+				if Hub.antiSlap then Hub.removeSlapsFromEveryone() end
+			end)
+			table.insert(Hub._slapPlayerHooks, ca)
+		end
+		for _, plr in pairs(Players:GetPlayers()) do hookPlayer(plr) end
+		local pa = Players.PlayerAdded:Connect(function(plr)
+			task.defer(function() hookPlayer(plr) end)
+		end)
+		table.insert(Hub._slapPlayerHooks, pa)
+		pcall(function()
+			local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+			if hum then
+				hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+				hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+				hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+				hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+			end
+		end)
+		if not Hub._slapCharConn then
+			Hub._slapCharConn = player.CharacterAdded:Connect(function(char)
+				task.defer(function()
+					local hum = char:WaitForChild("Humanoid", 5)
+					if hum and Hub.antiSlap then
+						hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+						hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+						hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+						hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+					end
+				end)
+			end)
+		end
 	else
 		Hub.restoreSlaps()
+		pcall(function()
+			local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+			if hum then
+				hum:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+				hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+				hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+				hum:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+			end
+		end)
 	end
 end
 
