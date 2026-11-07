@@ -50,6 +50,8 @@ Hub._radioConn = nil
 Hub._radioPlayerConn = nil
 Hub._slapConn = nil
 Hub._slapStepped = nil
+Hub._slapHeartbeat = nil
+Hub._touchBackup = nil
 Hub._slapPlayerHooks = {}
 Hub._slapCharConn = nil
 Hub._hiddenSlaps = {}
@@ -289,28 +291,36 @@ local function isSlapName(n)
 	return ln == "slap hand" or ln == "slaphand"
 		or string.find(ln, "slap hand", 1, true) ~= nil
 		or string.find(ln, "slaphand", 1, true) ~= nil
+		or (string.find(ln, "slap", 1, true) ~= nil and string.find(ln, "hand", 1, true) ~= nil)
 end
 
 local function hideSlapTool(t)
-	if not t or not t.Parent then return end
+	if not t then return end
 	if not Hub._hiddenSlaps then Hub._hiddenSlaps = {} end
-	if Hub._hiddenSlaps[t] then
-		if t.Parent ~= nil then t.Parent = nil end
-		return
+	if not Hub._hiddenSlaps[t] then
+		Hub._hiddenSlaps[t] = t.Parent
 	end
-	Hub._hiddenSlaps[t] = t.Parent
 	pcall(function()
 		if t:IsA("Tool") then
 			pcall(function() t:Deactivate() end)
 			pcall(function() t.Enabled = false end)
+			for _, p in pairs(t:GetDescendants()) do
+				if p:IsA("BasePart") then
+					p.CanTouch = false
+					p.CanQuery = false
+					p.CanCollide = false
+					p.Size = Vector3.new(0.05, 0.05, 0.05)
+				elseif p:IsA("TouchTransmitter") then
+					p:Destroy()
+				end
+			end
 		end
-		t.Parent = nil
+		if t.Parent ~= nil then t.Parent = nil end
 	end)
 end
 
 function Hub.removeSlapsFromEveryone()
 	pcall(function()
-		if not Hub._hiddenSlaps then Hub._hiddenSlaps = {} end
 		for _, plr in pairs(Players:GetPlayers()) do
 			local function wipe(parent)
 				if not parent then return end
@@ -323,9 +333,8 @@ function Hub.removeSlapsFromEveryone()
 			wipe(plr:FindFirstChild("Backpack"))
 			wipe(plr.Character)
 			wipe(plr:FindFirstChild("StarterGear"))
-			local char = plr.Character
-			if char then
-				for _, d in pairs(char:GetDescendants()) do
+			if plr.Character then
+				for _, d in pairs(plr.Character:GetDescendants()) do
 					if (d:IsA("Tool") or d:IsA("HopperBin")) and isSlapName(d.Name) then
 						hideSlapTool(d)
 					end
@@ -335,6 +344,11 @@ function Hub.removeSlapsFromEveryone()
 		for _, v in pairs(workspace:GetDescendants()) do
 			if (v:IsA("Tool") or v:IsA("HopperBin")) and isSlapName(v.Name) then
 				hideSlapTool(v)
+			elseif v:IsA("BasePart") and isSlapName(v.Name) then
+				pcall(function()
+					v.CanTouch = false
+					v.CanCollide = false
+				end)
 			end
 		end
 	end)
@@ -358,6 +372,33 @@ function Hub.restoreSlaps()
 		end
 		table.clear(Hub._hiddenSlaps or {})
 	end)
+	pcall(function()
+		local char = player.Character
+		if not char or not Hub._touchBackup then return end
+		for part, data in pairs(Hub._touchBackup) do
+			if part and part.Parent then
+				pcall(function()
+					part.CanTouch = data.CanTouch
+					part.CanQuery = data.CanQuery
+				end)
+			end
+		end
+		Hub._touchBackup = nil
+	end)
+end
+
+local function applyNoTouch(char)
+	if not char then return end
+	if not Hub._touchBackup then Hub._touchBackup = {} end
+	for _, p in pairs(char:GetDescendants()) do
+		if p:IsA("BasePart") then
+			if Hub._touchBackup[p] == nil then
+				Hub._touchBackup[p] = {CanTouch = p.CanTouch, CanQuery = p.CanQuery}
+			end
+			p.CanTouch = false
+			p.CanQuery = false
+		end
+	end
 end
 
 function Hub.handleAntiSlap()
@@ -370,6 +411,8 @@ function Hub.handleAntiSlap()
 		local hrp = char:FindFirstChild("HumanoidRootPart")
 		if not hum then return end
 
+		applyNoTouch(char)
+
 		hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
 		hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
 		hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
@@ -378,33 +421,27 @@ function Hub.handleAntiSlap()
 		hum.Sit = false
 		hum.PlatformStand = false
 
-		if hum.SeatPart then
-			pcall(function()
-				local seat = hum.SeatPart
-				hum.Sit = false
-				if seat and seat:IsA("Seat") then
-					seat.Disabled = true
-					task.defer(function() pcall(function() seat.Disabled = false end) end)
-				end
-			end)
+		for _, inst in pairs(char:GetDescendants()) do
+			local cn = inst.ClassName
+			if cn == "BodyVelocity" or cn == "BodyForce" or cn == "BodyAngularVelocity"
+				or cn == "BodyPosition" or cn == "BodyGyro"
+				or cn == "LinearVelocity" or cn == "AngularVelocity" or cn == "VectorForce"
+				or cn == "AlignPosition" or cn == "AlignOrientation"
+				or cn == "SeatWeld" then
+				pcall(function() inst:Destroy() end)
+			elseif cn == "Weld" and string.find(string.lower(inst.Name), "seat", 1, true) then
+				pcall(function() inst:Destroy() end)
+			end
 		end
 
-		for _, w in pairs(char:GetDescendants()) do
-			local cn = w.ClassName
-			if cn == "SeatWeld" or (w:IsA("Weld") and string.find(string.lower(w.Name), "seat", 1, true)) then
-				pcall(function() w:Destroy() end)
-			end
-		end
 		if hrp then
-			for _, x in pairs(hrp:GetChildren()) do
-				if x.ClassName == "SeatWeld" or x:IsA("BodyVelocity") or x:IsA("BodyForce")
-					or x:IsA("LinearVelocity") or x:IsA("VectorForce") or x:IsA("BodyAngularVelocity") then
-					pcall(function() x:Destroy() end)
-				end
-			end
 			local v = hrp.AssemblyLinearVelocity
-			if v.Magnitude > 60 then
-				hrp.AssemblyLinearVelocity = Vector3.new(0, math.min(v.Y, 0), 0)
+			local mag = v.Magnitude
+			if mag > 25 then
+				hrp.AssemblyLinearVelocity = Vector3.zero
+				hrp.AssemblyAngularVelocity = Vector3.zero
+			elseif mag > 12 then
+				hrp.AssemblyLinearVelocity = v * 0.15
 				hrp.AssemblyAngularVelocity = Vector3.zero
 			end
 		end
@@ -424,6 +461,14 @@ function Hub.handleAntiSlap()
 				hideSlapTool(t)
 			end
 		end
+
+		if typeof(getconnections) == "function" and hrp then
+			pcall(function()
+				for _, conn in pairs(getconnections(hrp.Touched)) do
+					pcall(function() conn:Disable() end)
+				end
+			end)
+		end
 	end)
 end
 
@@ -431,16 +476,20 @@ function Hub.setAntiSlap(on)
 	Hub.antiSlap = on and true or false
 	if Hub._slapConn then pcall(function() Hub._slapConn:Disconnect() end) Hub._slapConn = nil end
 	if Hub._slapStepped then pcall(function() Hub._slapStepped:Disconnect() end) Hub._slapStepped = nil end
+	if Hub._slapHeartbeat then pcall(function() Hub._slapHeartbeat:Disconnect() end) Hub._slapHeartbeat = nil end
 	if Hub._slapPlayerHooks then
 		for _, c in pairs(Hub._slapPlayerHooks) do pcall(function() c:Disconnect() end) end
 	end
 	Hub._slapPlayerHooks = {}
 	if on then
 		Hub.removeSlapsFromEveryone()
+		applyNoTouch(player.Character)
 		local function hideIfSlap(obj)
 			if not Hub.antiSlap or not obj then return end
 			if (obj:IsA("Tool") or obj:IsA("HopperBin")) and isSlapName(obj.Name) then
 				hideSlapTool(obj)
+			elseif obj:IsA("BasePart") and isSlapName(obj.Name) then
+				pcall(function() obj.CanTouch = false obj.CanCollide = false end)
 			end
 		end
 		Hub._slapConn = workspace.DescendantAdded:Connect(function(obj)
@@ -449,6 +498,22 @@ function Hub.setAntiSlap(on)
 		end)
 		Hub._slapStepped = RunService.RenderStepped:Connect(function()
 			if Hub.antiSlap then Hub.handleAntiSlap() end
+		end)
+		Hub._slapHeartbeat = RunService.Heartbeat:Connect(function()
+			if not Hub.antiSlap then return end
+			local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			if not hrp then return end
+			for _, inst in pairs(player.Character:GetDescendants()) do
+				local cn = inst.ClassName
+				if cn == "BodyVelocity" or cn == "BodyForce" or cn == "BodyAngularVelocity"
+					or cn == "LinearVelocity" or cn == "VectorForce" or cn == "BodyPosition" then
+					pcall(function() inst:Destroy() end)
+				end
+			end
+			if hrp.AssemblyLinearVelocity.Magnitude > 25 then
+				hrp.AssemblyLinearVelocity = Vector3.zero
+				hrp.AssemblyAngularVelocity = Vector3.zero
+			end
 		end)
 		local function hookPlayer(plr)
 			local function hookCont(cont)
@@ -504,6 +569,7 @@ function Hub.setAntiSlap(on)
 		if not Hub._slapCharConn then
 			Hub._slapCharConn = player.CharacterAdded:Connect(function(char)
 				task.defer(function()
+					if Hub.antiSlap then applyNoTouch(char) end
 					local hum = char:WaitForChild("Humanoid", 5)
 					if hum and Hub.antiSlap then
 						hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
